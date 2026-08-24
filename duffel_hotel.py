@@ -15,29 +15,10 @@ from typing import Optional
 
 import requests
 from pydantic import BaseModel, Field, model_validator
+from dotenv import load_dotenv
 
 
-def _load_dotenv_if_present() -> None:
-    """
-    Minimal .env loader — no python-dotenv dependency required. Reads a
-    .env file next to this script (KEY=VALUE per line, # comments allowed)
-    and sets any keys not already present in the real environment.
-    """
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    if not os.path.isfile(env_path):
-        return
-    with open(env_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            os.environ.setdefault(key, value)
-
-
-_load_dotenv_if_present()
+load_dotenv()
 
 DUFFEL_BASE_URL = "https://api.duffel.com"
 DUFFEL_VERSION = "v2"
@@ -382,79 +363,71 @@ def list_hotel_bookings(limit: int = 50, after: Optional[str] = None) -> dict:
         "next_cursor": raw.get("meta", {}).get("after"),
     }
 
+#test
+# if __name__ == "__main__":
+#     import sys
+#     from datetime import date, timedelta
 
-# --------------------------------------------------------------------------- #
-# Demo — runs the real sandbox flow and prints each step's output.
-# Requires DUFFEL_API_KEY to be set to a duffel_test_... key.
-#
-#     python hotel_module.py            # search -> rates -> quote, no booking
-#     python hotel_module.py --book     # also books, fetches, and cancels
-# --------------------------------------------------------------------------- #
+#     def _print_section(title: str) -> None:
+#         print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
 
-if __name__ == "__main__":
-    import sys
-    from datetime import date, timedelta
+#     if not os.getenv("DUFFEL_API_KEY"):
+#         print("Set DUFFEL_API_KEY to a duffel_test_... sandbox key before running this.")
+#         sys.exit(1)
 
-    def _print_section(title: str) -> None:
-        print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
+#     do_book = "--book" in sys.argv
+#     check_in = (date.today() + timedelta(days=30)).isoformat()
+#     check_out = (date.today() + timedelta(days=32)).isoformat()
 
-    if not os.getenv("DUFFEL_API_KEY"):
-        print("Set DUFFEL_API_KEY to a duffel_test_... sandbox key before running this.")
-        sys.exit(1)
+#     _print_section(f"1. search_hotels — test hotels at ({TEST_HOTEL_LATITUDE}, {TEST_HOTEL_LONGITUDE})")
+#     search_result = search_hotels(
+#         HotelSearchInput(
+#             check_in_date=check_in,
+#             check_out_date=check_out,
+#             adult_count=1,
+#             location=GeoLocation(latitude=TEST_HOTEL_LATITUDE, longitude=TEST_HOTEL_LONGITUDE, radius_km=5),
+#         )
+#     )
+#     print(search_result)
 
-    do_book = "--book" in sys.argv
-    check_in = (date.today() + timedelta(days=30)).isoformat()
-    check_out = (date.today() + timedelta(days=32)).isoformat()
+#     results = search_result["results"]
+#     if not results:
+#         print("No test hotels returned — double-check the key is a duffel_test_... sandbox key.")
+#         sys.exit(1)
+#     first = results[0]
 
-    _print_section(f"1. search_hotels — test hotels at ({TEST_HOTEL_LATITUDE}, {TEST_HOTEL_LONGITUDE})")
-    search_result = search_hotels(
-        HotelSearchInput(
-            check_in_date=check_in,
-            check_out_date=check_out,
-            adult_count=1,
-            location=GeoLocation(latitude=TEST_HOTEL_LATITUDE, longitude=TEST_HOTEL_LONGITUDE, radius_km=5),
-        )
-    )
-    print(search_result)
+#     _print_section(f"2. get_hotel_rates — search_result_id={first['search_result_id']}")
+#     rates = get_hotel_rates(search_result_id=first["search_result_id"])
+#     print(rates)
+#     first_rate = rates["rooms"][0]["rates"][0]
 
-    results = search_result["results"]
-    if not results:
-        print("No test hotels returned — double-check the key is a duffel_test_... sandbox key.")
-        sys.exit(1)
-    first = results[0]
+#     _print_section(f"3. create_hotel_quote — rate_id={first_rate['rate_id']}")
+#     quote = create_hotel_quote(rate_id=first_rate["rate_id"])
+#     print(quote)
 
-    _print_section(f"2. get_hotel_rates — search_result_id={first['search_result_id']}")
-    rates = get_hotel_rates(search_result_id=first["search_result_id"])
-    print(rates)
-    first_rate = rates["rooms"][0]["rates"][0]
+#     if not do_book:
+#         print("\nStopping before booking (pass --book to also test book_hotel + cancel_hotel_booking).")
+#         sys.exit(0)
 
-    _print_section(f"3. create_hotel_quote — rate_id={first_rate['rate_id']}")
-    quote = create_hotel_quote(rate_id=first_rate["rate_id"])
-    print(quote)
+#     _print_section("4. book_hotel")
+#     booking = book_hotel(
+#         quote_id=quote["quote_id"],
+#         guests=[GuestName(given_name="Ada", family_name="Lovelace")],
+#         email="[email protected]",
+#         phone_number="+442080160509",
+#         confirmed_price=float(quote["total_amount"]),
+#         confirmed_currency=quote["total_currency"],
+#     )
+#     print(booking)
+#     if booking.get("code") == "price_mismatch":
+#         print("Quote expired between steps — re-run.")
+#         sys.exit(1)
 
-    if not do_book:
-        print("\nStopping before booking (pass --book to also test book_hotel + cancel_hotel_booking).")
-        sys.exit(0)
+#     _print_section(f"5. get_hotel_booking — booking_id={booking['booking_id']}")
+#     print(get_hotel_booking(booking_id=booking["booking_id"]))
 
-    _print_section("4. book_hotel")
-    booking = book_hotel(
-        quote_id=quote["quote_id"],
-        guests=[GuestName(given_name="Ada", family_name="Lovelace")],
-        email="[email protected]",
-        phone_number="+442080160509",
-        confirmed_price=float(quote["total_amount"]),
-        confirmed_currency=quote["total_currency"],
-    )
-    print(booking)
-    if booking.get("code") == "price_mismatch":
-        print("Quote expired between steps — re-run.")
-        sys.exit(1)
+#     _print_section("6. list_hotel_bookings")
+#     print(list_hotel_bookings(limit=10))
 
-    _print_section(f"5. get_hotel_booking — booking_id={booking['booking_id']}")
-    print(get_hotel_booking(booking_id=booking["booking_id"]))
-
-    _print_section("6. list_hotel_bookings")
-    print(list_hotel_bookings(limit=10))
-
-    _print_section(f"7. cancel_hotel_booking — booking_id={booking['booking_id']}")
-    print(cancel_hotel_booking(booking_id=booking["booking_id"]))
+#     _print_section(f"7. cancel_hotel_booking — booking_id={booking['booking_id']}")
+#     print(cancel_hotel_booking(booking_id=booking["booking_id"]))
