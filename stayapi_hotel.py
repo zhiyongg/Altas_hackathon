@@ -290,56 +290,48 @@ def get_airbnb_calendar(listing_id: str, months: int = 3) -> dict:
     }
 
 
-# --------------------------------------------------------------------------- #
-# Demo — runs the real API against your free-tier key and prints each
-# step's output.
-#
-# Requires STAYAPI_KEY to be set (50 free requests on signup, no card).
-#
-#     python hotel_module.py
-# --------------------------------------------------------------------------- #
+# #test
+# if __name__ == "__main__":
+#     import sys
 
-if __name__ == "__main__":
-    import sys
+#     def _print_section(title: str) -> None:
+#         print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
 
-    def _print_section(title: str) -> None:
-        print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
+#     if not os.getenv("STAYAPI_KEY"):
+#         print("Set STAYAPI_KEY before running this. Sign up at https://stayapi.com/users/sign_up")
+#         sys.exit(1)
 
-    if not os.getenv("STAYAPI_KEY"):
-        print("Set STAYAPI_KEY before running this. Sign up at https://stayapi.com/users/sign_up")
-        sys.exit(1)
+#     _print_section("1. lookup_destination — 'Paris'")
+#     dest_result = lookup_destination(query="Paris")
+#     print(dest_result)
 
-    _print_section("1. lookup_destination — 'Paris'")
-    dest_result = lookup_destination(query="Paris")
-    print(dest_result)
+#     dest_id = dest_result["dest_id"]
+#     dest_type = dest_result["dest_type"] or "CITY"
+#     if not dest_id:
+#         print(f"No destination resolved: {dest_result['message']}")
+#         sys.exit(1)
+#     if dest_result["suggestions"]:
+#         print(f"(Ambiguous query — {len(dest_result['suggestions'])} suggestions available, using the first.)")
 
-    dest_id = dest_result["dest_id"]
-    dest_type = dest_result["dest_type"] or "CITY"
-    if not dest_id:
-        print(f"No destination resolved: {dest_result['message']}")
-        sys.exit(1)
-    if dest_result["suggestions"]:
-        print(f"(Ambiguous query — {len(dest_result['suggestions'])} suggestions available, using the first.)")
+#     _print_section(f"2. search_hotels — dest_id={dest_id}, dest_type={dest_type}")
+#     search_result = search_hotels(
+#         HotelSearchInput(
+#             dest_id=dest_id, dest_type=dest_type, checkin="2026-12-10", checkout="2026-12-13", adults=2, rooms=1
+#         )
+#     )
+#     print(search_result)
 
-    _print_section(f"2. search_hotels — dest_id={dest_id}, dest_type={dest_type}")
-    search_result = search_hotels(
-        HotelSearchInput(
-            dest_id=dest_id, dest_type=dest_type, checkin="2026-12-10", checkout="2026-12-13", adults=2, rooms=1
-        )
-    )
-    print(search_result)
+#     hits = search_result["results"]
+#     if not hits:
+#         print("No hotels returned for that destination/date range.")
+#         sys.exit(0)
+#     first_hotel_id = hits[0]["hotel_id"]
 
-    hits = search_result["results"]
-    if not hits:
-        print("No hotels returned for that destination/date range.")
-        sys.exit(0)
-    first_hotel_id = hits[0]["hotel_id"]
+#     _print_section(f"3. get_hotel_details — hotel_id={first_hotel_id}")
+#     print(get_hotel_details(hotel_id=first_hotel_id))
 
-    _print_section(f"3. get_hotel_details — hotel_id={first_hotel_id}")
-    print(get_hotel_details(hotel_id=first_hotel_id))
+#     _print_section(f"4. get_hotel_reviews — hotel_id={first_hotel_id}")
+#     print(get_hotel_reviews(hotel_id=first_hotel_id, per_page=5))
 
-    _print_section(f"4. get_hotel_reviews — hotel_id={first_hotel_id}")
-    print(get_hotel_reviews(hotel_id=first_hotel_id, per_page=5))
-
-    _print_section("5. meta_search — cross-OTA links for the same hotel")
-    print(meta_search(hotel_name=hits[0]["hotel_name"], location="Paris"))
+#     _print_section("5. meta_search — cross-OTA links for the same hotel")
+#     print(meta_search(hotel_name=hits[0]["hotel_name"], location="Paris"))
