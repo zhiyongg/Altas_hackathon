@@ -19,7 +19,6 @@ FIELD_MASK = [
     "places.rating",            # Enterprise
     "places.regularOpeningHours.weekdayDescriptions",
     "places.priceLevel",
-    "places.websiteUri",
 ]
 
 
