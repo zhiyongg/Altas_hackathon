@@ -77,10 +77,10 @@ def search_nearby(
 
 def test_restaurants_near_bukit_jalil():
     """Test 1: Search for restaurants near Bukit Jalil, Kuala Lumpur."""
-    print("\n>>> TEST 1: Restaurants near Bukit Jalil (radius=1000m, max=5)")
+    print("\n>>> TEST 1: Mcd near APU (radius=1000m, max=5)")
     result = search_nearby(
-        center_lat=3.053422,
-        center_lng=101.670855,
+        center_lat=3.0550753,
+        center_lng=101.7005763,
         radius=1000.0,
         included_types=["restaurant"],
         max_results=5,
