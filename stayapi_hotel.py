@@ -2,29 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+from pickletools import read_unicodestring4
 from typing import Callable, Optional
 from dotenv import load_dotenv
 
 import requests
 from pydantic import BaseModel, Field, model_validator
-
-
-def _debug_and_parse(label: str, raw: dict, parse_fn: Callable[[dict], dict]):
-    """
-    Print the raw JSON StayAPI returned (so we can see the real shape when
-    docs are stale), then try to parse it. If parsing fails — wrong key
-    name, unexpected nesting, etc — print the error and return the raw
-    dict unparsed instead of crashing, so one bad field doesn't stop you
-    from testing the rest of the demo in the same run.
-    """
-    print(f"\n--- RAW {label} ---")
-    print(json.dumps(raw, indent=2, default=str)[:8000])
-    print(f"--- END RAW {label} ---\n")
-    try:
-        return parse_fn(raw)
-    except Exception as exc:  # noqa: BLE001 - deliberately broad for debug visibility
-        print(f"[PARSE WARNING] {label} parsing failed ({exc!r}) — returning raw response unparsed.")
-        return raw
 
 load_dotenv()
 STAYAPI_BASE_URL = "https://api.stayapi.com"
@@ -54,102 +37,6 @@ def _request(path: str, params: Optional[dict] = None) -> dict:
         raise StayAPIError(f"StayAPI returned success=false on GET {path}: {body}")
     return body
 
-
-# --------------------------------------------------------------------------- #
-# Output parsers — StayAPI's raw JSON is already fairly flat, but we still
-# normalize field names/shape here so callers don't touch raw payloads and
-# so a future schema tweak on StayAPI's side only needs a change in one place.
-# --------------------------------------------------------------------------- #
-
-def _parse_destination_suggestion(dest: dict) -> dict:
-    return {
-        "dest_id": dest.get("dest_id"),
-        "dest_type": dest.get("dest_type"),
-        "label": dest.get("label"),
-    }
-
-
-def _parse_search_hit(hit: dict) -> dict:
-    price = hit.get("price") or {}
-    rating = hit.get("rating") or {}
-    return {
-        "hotel_id": hit.get("hotel_id"),
-        "hotel_name": hit.get("name"),
-        "address": hit.get("address"),
-        "city": hit.get("city"),
-        "display_location": hit.get("display_location"),
-        "distance": hit.get("distance"),
-        "latitude": hit.get("latitude"),
-        "longitude": hit.get("longitude"),
-        "star_rating": hit.get("star_rating"),
-        "review_score": rating.get("score"),
-        "review_score_word": rating.get("display"),
-        "review_count": rating.get("review_count"),
-        "price_amount": price.get("amount"),
-        "price_display": price.get("display"),
-        "price_before_discount": price.get("before_discount"),
-        "currency_code": price.get("currency"),
-        "image_url": hit.get("image_url"),
-        "free_cancellation": hit.get("free_cancellation"),
-        "no_prepayment": hit.get("no_prepayment"),
-        "is_sold_out": hit.get("is_sold_out"),
-        "room_name": hit.get("room_name"),
-    }
-
-
-def _parse_meta_result(meta: dict) -> dict:
-    return {
-        "hotel_name": meta.get("hotel_name"),
-        "location": meta.get("location"),
-        "links": meta.get("links", {}),
-        "platform_count": meta.get("platform_count"),
-    }
-
-
-def _parse_hotel_details(details: dict) -> dict:
-    coords = details.get("coordinates") or {}
-    return {
-        "hotel_id": details.get("hotel_id"),
-        "name": details.get("name"),
-        "address": details.get("address"),
-        "latitude": coords.get("lat"),
-        "longitude": coords.get("lng"),
-        "star_rating": details.get("star_rating"),
-        "review_score": details.get("review_score"),
-        "amenities": details.get("amenities", []),
-    }
-
-
-def _parse_review(review: dict) -> dict:
-    return {
-        "author": review.get("author"),
-        "country": review.get("country"),
-        "rating": review.get("rating"),
-        "title": review.get("title"),
-        "date": review.get("date"),
-        "trip_type": review.get("trip_type"),  # present on TripAdvisor reviews
-    }
-
-
-def _parse_reviews_response(raw: dict) -> dict:
-    data = raw.get("data", {})
-    return {
-        "hotel_id": data.get("hotel_id") or data.get("location_id"),
-        "total_reviews": data.get("total_reviews"),
-        "average_rating": data.get("average_rating"),
-        "reviews": [_parse_review(r) for r in data.get("reviews", [])],
-    }
-
-
-def _parse_calendar_day(day: dict) -> dict:
-    return {
-        "date": day.get("date"),
-        "available": day.get("available"),
-        "min_nights": day.get("min_nights"),
-        "price": day.get("price"),
-    }
-
-
 # --------------------------------------------------------------------------- #
 # 1. Resolve a place name to a Booking.com dest_id
 #
@@ -167,18 +54,7 @@ def lookup_destination(query: str, language: str = "en-us") -> dict:
     """
     raw = _request("/v1/booking/destinations/lookup", params={"query": query, "language": language})
 
-    def _parse(raw: dict) -> dict:
-        return {
-            "query": raw.get("query"),
-            "normalized_query": raw.get("normalized_query"),
-            "dest_id": raw.get("dest_id"),
-            "dest_type": raw.get("dest_type"),
-            "suggestions": [_parse_destination_suggestion(s) for s in raw.get("suggestions", [])],
-            "message": raw.get("message"),
-        }
-
-    return _debug_and_parse("lookup_destination", raw, _parse)
-
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
 
 # --------------------------------------------------------------------------- #
 # 2. Search hotels in a destination across given dates
@@ -232,21 +108,8 @@ def search_hotels(params: HotelSearchInput) -> dict:
         query_params["children_ages"] = ",".join(str(a) for a in params.children_ages)
 
     raw = _request("/v1/booking/search", params=query_params)
-
-    def _parse(raw: dict) -> dict:
-        data = raw.get("data", {})
-        hits = data.get("hotels", []) if isinstance(data, dict) else []
-        # pagination location wasn't visible in the truncated debug output —
-        # check both top-level and nested under data, fall back to None.
-        pagination = raw.get("pagination") or (data.get("pagination") if isinstance(data, dict) else None) or {}
-        return {
-            "results": [_parse_search_hit(h) for h in hits if isinstance(h, dict)],
-            "total_count": pagination.get("total_count_with_filters"),
-            "rows_per_page": pagination.get("rows_per_page"),
-            "current_offset": pagination.get("current_offset"),
-        }
-
-    return _debug_and_parse("search_hotels", raw, _parse)
+    
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
 
 
 # --------------------------------------------------------------------------- #
@@ -260,8 +123,8 @@ def meta_search(hotel_name: str, location: str) -> dict:
     location. Useful for cross-referencing a hotel_id you got from one
     source against another source's numbering.
     """
-    raw = _request("/v1/meta/search", params={"hotel_name": hotel_name, "location": location})
-    return _debug_and_parse("meta_search", raw, lambda r: _parse_meta_result(r.get("data", {})))
+    raw = _request("/v1/meta/search", params={"hotel_name": hotel_name, "location": location})    
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
 
 
 # --------------------------------------------------------------------------- #
@@ -275,7 +138,7 @@ def get_hotel_details(hotel_id: str) -> dict:
     just price. Returns a parsed dict.
     """
     raw = _request("/v2/booking/hotel/details", params={"hotel_id": hotel_id})
-    return _debug_and_parse("get_hotel_details", raw, lambda r: _parse_hotel_details(r.get("data", {})))
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
 
 
 # --------------------------------------------------------------------------- #
@@ -291,7 +154,7 @@ def get_hotel_reviews(hotel_id: str, per_page: int = 10, language: str = "en") -
         "/v1/booking/hotel/reviews",
         params={"hotel_id": hotel_id, "per_page": per_page, "language": language},
     )
-    return _debug_and_parse("get_hotel_reviews", raw, _parse_reviews_response)
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
 
 
 # --------------------------------------------------------------------------- #
@@ -313,15 +176,9 @@ def get_airbnb_calendar(listing_id: str, months: int) -> dict:
         print("[INFO] path-style /v1/airbnb/listing/{id}/calendar 404'd — falling back to query-style endpoint.")
         raw = _request("/v1/airbnb/calendar", params={"id": listing_id, "months": months})
  
-    def _parse(raw: dict) -> dict:
-        data = raw.get("data", {})
-        return {
-            "listing_id": data.get("id", listing_id),
-            "calendar": [_parse_calendar_day(d) for d in data.get("calendar", [])],
-        }
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
  
-    return _debug_and_parse("get_airbnb_calendar", raw, _parse)
- 
+
 def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, rooms: int) -> dict:
     """
     Check live nightly rates per room type for ONE specific hotel_id across
@@ -334,30 +191,8 @@ def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, ro
         "/v1/booking/hotel/prices",
         params={"hotel_id": hotel_id, "check_in": checkin, "check_out": checkout, "adults": adults, "rooms": rooms},
     )
- 
-    def _parse(raw: dict) -> dict:
-        data = raw.get("data", {})
-        rooms_data = data.get("rooms", []) if isinstance(data, dict) else []
-        return {
-            "hotel_id": data.get("hotel_id", hotel_id) if isinstance(data, dict) else hotel_id,
-            "checkin": checkin,
-            "checkout": checkout,
-            "rooms": [
-                {
-                    "room_name": r.get("room_name") or r.get("name"),
-                    "price_amount": (r.get("price") or {}).get("amount"),
-                    "price_display": (r.get("price") or {}).get("display"),
-                    "currency": (r.get("price") or {}).get("currency"),
-                    "free_cancellation": r.get("free_cancellation"),
-                    "board_type": r.get("board_type"),
-                    "is_sold_out": r.get("is_sold_out"),
-                }
-                for r in rooms_data
-                if isinstance(r, dict)
-            ],
-        }
- 
-    return _debug_and_parse("get_hotel_prices", raw, _parse)
+    return(json.dumps(raw, indent=2, default=str)[:8000]);
+
  
 
 #test 
@@ -370,7 +205,7 @@ def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, ro
 
 #     if not os.getenv("STAYAPI_KEY"):
 #         print("Set STAYAPI_KEY before running this. Sign up at https://stayapi.com/users/sign_up")
-    #     sys.exit(1)
+#         sys.exit(1)
 
     # _print_section("1. lookup_destination — 'Paris'")
     # dest_result = lookup_destination(query="Paris")
