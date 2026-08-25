@@ -22,6 +22,7 @@ def get_places(query: str, max_results: int = 5) -> list[dict]:
         "places.regularOpeningHours.weekdayDescriptions",
         "places.priceLevel",
         "places.primaryType",
+        #"places.websiteUri"   # Added the place's URI for user to redirect to the place's website
     ]
 
     headers = {
@@ -52,6 +53,7 @@ def get_places(query: str, max_results: int = 5) -> list[dict]:
                 ),
                 "priceLevel": place.get("priceLevel", "PRICE_LEVEL_UNSPECIFIED"),
                 "primaryType": place.get("primaryType"),
+                #"websiteUri": place.get("websiteUri"),
             }
         )
 
@@ -62,7 +64,7 @@ def get_places(query: str, max_results: int = 5) -> list[dict]:
 
 # Example test
 if __name__ == "__main__":
-    data = get_places("cafes in Bukit Jalil", max_results=2)
+    data = get_places("Asia Pacific University", max_results=2)
     import json
 
     print(json.dumps(data, indent=2))
