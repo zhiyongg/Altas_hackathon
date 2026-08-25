@@ -1,0 +1,94 @@
+import os
+import sys
+import json
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Ensure UTF-8 output on Windows
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+
+# Load .env from the script's directory
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.prebuilt import create_react_agent
+
+# Import schemas and tools from new modules
+from schemas import ItineraryPlan
+from tools import search_flights_atlas, nearby_search, text_search
+
+# ==========================================
+# Agent Setup and Execution
+# ==========================================
+def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
+    """
+    Runs the agent and ensures the output is strictly structured as JSON.
+    """
+    # Initialize the LLM
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.1-flash-lite", 
+            temperature=0.2
+        )
+    except Exception as e:
+        raise e
+
+    tools = [search_flights_atlas, nearby_search, text_search]
+
+    # Use a system message to guide the agent
+    system_prompt = '''You are an expert travel planner AI agent.
+        Your goal is to build an itinerary based on user input. 
+        You have access to tools for flights (Atlas Flight API) and places (Nearby Search, Text Search).
+
+        IMPORTANT:
+        Once you have gathered the necessary information, formulate your final answer.
+        Ensure you look up real flights and real places using your tools. The price and currency must follow back the tool responses.
+        '''
+
+    agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
+
+    # Combine input and custom constraints
+    prompt = f"""
+    Please create a travel itinerary plan for the following request:
+    {user_request}
+    
+    User Custom Messages/Preferences:
+    {custom_messages}
+    """
+    
+    # Run the agent
+    result = agent.invoke({"messages": [HumanMessage(content=prompt)]})
+    final_output = result["messages"][-1].content
+    
+    # Enforce the Pydantic schema using with_structured_output to parse the agent's final answer
+    structured_llm = llm.with_structured_output(ItineraryPlan)
+    try:
+        structured_result = structured_llm.invoke(f"Extract the itinerary from this text into the schema:\n{final_output}")
+        return structured_result.model_dump_json(indent=2)
+    except Exception as e:
+        # Fallback
+        print(f"Failed to parse into Pydantic schema: {e}")
+        return final_output
+
+if __name__ == "__main__":
+    print("Initializing Agent...")
+    
+    if "GOOGLE_API_KEY" not in os.environ:
+        print("\nWARNING: GOOGLE_API_KEY environment variable is not set. Please set it to use Gemini.")
+        
+    user_req = "Plan a 4-Day Kota Kinabalu Adventure & Dining from KUL to BKI. Start date: 2026-10-22, End date: 2026-10-25."
+    user_pref = "Please make sure to add an activity to visit a cafe to unwind after the flight on day 1."
+
+    print("User Request:", user_req)
+    print("User Preferences:", user_pref)
+    print("\nPlanning itinerary (this may take a few seconds)...")
+    
+    try:
+        final_json = run_itinerary_agent(user_req, user_pref)
+        print("\n✅ Successfully generated itinerary JSON:\n")
+        print(final_json)
+    except Exception as e:
+        print("\n❌ An error occurred:")
+        print(e)
