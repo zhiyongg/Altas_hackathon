@@ -1,17 +1,30 @@
-"""
-only is hotel data API, not a transactional booking API
-Auth is a single header, no OAuth: `x-api-key: YOUR_KEY`.
-"""
-
 from __future__ import annotations
 
+import json
 import os
-from typing import Optional
+from typing import Callable, Optional
+from dotenv import load_dotenv
 
 import requests
-from pydantic import BaseModel, Field
-from dotenv import load_dotenv  
+from pydantic import BaseModel, Field, model_validator
 
+
+def _debug_and_parse(label: str, raw: dict, parse_fn: Callable[[dict], dict]):
+    """
+    Print the raw JSON StayAPI returned (so we can see the real shape when
+    docs are stale), then try to parse it. If parsing fails — wrong key
+    name, unexpected nesting, etc — print the error and return the raw
+    dict unparsed instead of crashing, so one bad field doesn't stop you
+    from testing the rest of the demo in the same run.
+    """
+    print(f"\n--- RAW {label} ---")
+    print(json.dumps(raw, indent=2, default=str)[:8000])
+    print(f"--- END RAW {label} ---\n")
+    try:
+        return parse_fn(raw)
+    except Exception as exc:  # noqa: BLE001 - deliberately broad for debug visibility
+        print(f"[PARSE WARNING] {label} parsing failed ({exc!r}) — returning raw response unparsed.")
+        return raw
 
 load_dotenv()
 STAYAPI_BASE_URL = "https://api.stayapi.com"
@@ -57,24 +70,30 @@ def _parse_destination_suggestion(dest: dict) -> dict:
 
 
 def _parse_search_hit(hit: dict) -> dict:
+    price = hit.get("price") or {}
+    rating = hit.get("rating") or {}
     return {
         "hotel_id": hit.get("hotel_id"),
-        "hotel_name": hit.get("hotel_name"),
-        "url": hit.get("url"),
-        "image_url": hit.get("image_url"),
-        "star_rating": hit.get("star_rating"),
-        "review_score": hit.get("review_score"),
-        "review_score_word": hit.get("review_score_word"),
-        "review_count": hit.get("review_count"),
+        "hotel_name": hit.get("name"),
         "address": hit.get("address"),
-        "distance_from_center_km": hit.get("distance_from_center"),
-        "unit_configuration_label": hit.get("unit_configuration_label"),
-        "min_total_price": hit.get("min_total_price"),
-        "currency_code": hit.get("currency_code"),
-        "free_cancellation": bool(hit.get("is_free_cancellable")),
-        "no_prepayment": bool(hit.get("is_no_prepayment_block")),
-        "checkin": hit.get("checkin"),
-        "checkout": hit.get("checkout"),
+        "city": hit.get("city"),
+        "display_location": hit.get("display_location"),
+        "distance": hit.get("distance"),
+        "latitude": hit.get("latitude"),
+        "longitude": hit.get("longitude"),
+        "star_rating": hit.get("star_rating"),
+        "review_score": rating.get("score"),
+        "review_score_word": rating.get("display"),
+        "review_count": rating.get("review_count"),
+        "price_amount": price.get("amount"),
+        "price_display": price.get("display"),
+        "price_before_discount": price.get("before_discount"),
+        "currency_code": price.get("currency"),
+        "image_url": hit.get("image_url"),
+        "free_cancellation": hit.get("free_cancellation"),
+        "no_prepayment": hit.get("no_prepayment"),
+        "is_sold_out": hit.get("is_sold_out"),
+        "room_name": hit.get("room_name"),
     }
 
 
@@ -143,22 +162,22 @@ def lookup_destination(query: str, language: str = "en-us") -> dict:
     Resolve a free-text city/region name (e.g. "Paris", "Bali") to the
     dest_id / dest_type search_hotels expects.
 
-    Unlike most StayAPI endpoints, this one is NOT wrapped in a `data` key —
-    dest_id/dest_type/suggestions sit at the top level of the response.
-    `dest_id`/`dest_type` here are already the top (default) match; if the
-    query was ambiguous (e.g. "Paris" -> France vs Texas), `suggestions`
-    holds the alternatives so you can ask the user to disambiguate instead
-    of silently booking the wrong city.
+    Prints the raw JSON response before parsing (see _debug_and_parse) so
+    you can confirm the real shape while wiring this up.
     """
     raw = _request("/v1/booking/destinations/lookup", params={"query": query, "language": language})
-    return {
-        "query": raw.get("query"),
-        "normalized_query": raw.get("normalized_query"),
-        "dest_id": raw.get("dest_id"),
-        "dest_type": raw.get("dest_type"),
-        "suggestions": [_parse_destination_suggestion(s) for s in raw.get("suggestions", [])],
-        "message": raw.get("message"),
-    }
+
+    def _parse(raw: dict) -> dict:
+        return {
+            "query": raw.get("query"),
+            "normalized_query": raw.get("normalized_query"),
+            "dest_id": raw.get("dest_id"),
+            "dest_type": raw.get("dest_type"),
+            "suggestions": [_parse_destination_suggestion(s) for s in raw.get("suggestions", [])],
+            "message": raw.get("message"),
+        }
+
+    return _debug_and_parse("lookup_destination", raw, _parse)
 
 
 # --------------------------------------------------------------------------- #
@@ -167,6 +186,16 @@ def lookup_destination(query: str, language: str = "en-us") -> dict:
 
 class HotelSearchInput(BaseModel):
     dest_id: str = Field(..., description="From lookup_destination")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_dest_id(cls, data):
+        # lookup_destination returns dest_id as an int (e.g. -372490);
+        # the search endpoint just wants it as a query string either way.
+        if isinstance(data, dict) and isinstance(data.get("dest_id"), int):
+            data = {**data, "dest_id": str(data["dest_id"])}
+        return data
+
     dest_type: str = Field("CITY", description="From lookup_destination, e.g. CITY/DISTRICT/AIRPORT/LANDMARK")
     checkin: str = Field(..., description="YYYY-MM-DD")
     checkout: str = Field(..., description="YYYY-MM-DD")
@@ -203,14 +232,21 @@ def search_hotels(params: HotelSearchInput) -> dict:
         query_params["children_ages"] = ",".join(str(a) for a in params.children_ages)
 
     raw = _request("/v1/booking/search", params=query_params)
-    hits = raw.get("data", [])
-    pagination = raw.get("pagination", {})
-    return {
-        "results": [_parse_search_hit(h) for h in hits],
-        "total_count": pagination.get("total_count_with_filters"),
-        "rows_per_page": pagination.get("rows_per_page"),
-        "current_offset": pagination.get("current_offset"),
-    }
+
+    def _parse(raw: dict) -> dict:
+        data = raw.get("data", {})
+        hits = data.get("hotels", []) if isinstance(data, dict) else []
+        # pagination location wasn't visible in the truncated debug output —
+        # check both top-level and nested under data, fall back to None.
+        pagination = raw.get("pagination") or (data.get("pagination") if isinstance(data, dict) else None) or {}
+        return {
+            "results": [_parse_search_hit(h) for h in hits if isinstance(h, dict)],
+            "total_count": pagination.get("total_count_with_filters"),
+            "rows_per_page": pagination.get("rows_per_page"),
+            "current_offset": pagination.get("current_offset"),
+        }
+
+    return _debug_and_parse("search_hotels", raw, _parse)
 
 
 # --------------------------------------------------------------------------- #
@@ -225,7 +261,7 @@ def meta_search(hotel_name: str, location: str) -> dict:
     source against another source's numbering.
     """
     raw = _request("/v1/meta/search", params={"hotel_name": hotel_name, "location": location})
-    return _parse_meta_result(raw.get("data", {}))
+    return _debug_and_parse("meta_search", raw, lambda r: _parse_meta_result(r.get("data", {})))
 
 
 # --------------------------------------------------------------------------- #
@@ -239,7 +275,7 @@ def get_hotel_details(hotel_id: str) -> dict:
     just price. Returns a parsed dict.
     """
     raw = _request("/v2/booking/hotel/details", params={"hotel_id": hotel_id})
-    return _parse_hotel_details(raw.get("data", {}))
+    return _debug_and_parse("get_hotel_details", raw, lambda r: _parse_hotel_details(r.get("data", {})))
 
 
 # --------------------------------------------------------------------------- #
@@ -255,42 +291,77 @@ def get_hotel_reviews(hotel_id: str, per_page: int = 10, language: str = "en") -
         "/v1/booking/hotel/reviews",
         params={"hotel_id": hotel_id, "per_page": per_page, "language": language},
     )
-    return _parse_reviews_response(raw)
-
-
-# --------------------------------------------------------------------------- #
-# 6. TripAdvisor reviews by location_id
-# --------------------------------------------------------------------------- #
-
-def get_tripadvisor_reviews(location_id: str, page: int = 1) -> dict:
-    """
-    Paginated TripAdvisor-native reviews for a property's location_id.
-    Returns parsed reviews, same shape as get_hotel_reviews.
-    """
-    raw = _request("/v1/tripadvisor/hotel/reviews", params={"location_id": location_id, "page": page})
-    return _parse_reviews_response(raw)
+    return _debug_and_parse("get_hotel_reviews", raw, _parse_reviews_response)
 
 
 # --------------------------------------------------------------------------- #
 # 7. Airbnb listing availability calendar
 # --------------------------------------------------------------------------- #
 
-def get_airbnb_calendar(listing_id: str, months: int = 3) -> dict:
+def get_airbnb_calendar(listing_id: str, months: int) -> dict:
     """
     Multi-month availability + nightly price calendar for an Airbnb
     listing_id. Returns a parsed list of {date, available, min_nights,
     price} entries — useful for showing an availability grid rather than a
     single search result.
     """
-    raw = _request("/v1/airbnb/calendar", params={"id": listing_id, "months": months})
-    data = raw.get("data", {})
-    return {
-        "listing_id": data.get("id"),
-        "calendar": [_parse_calendar_day(d) for d in data.get("calendar", [])],
-    }
+    try:
+        raw = _request(f"/v1/airbnb/listing/{listing_id}/calendar", params={"months": months})
+    except StayAPIError as exc:
+        if "404" not in str(exc):
+            raise
+        print("[INFO] path-style /v1/airbnb/listing/{id}/calendar 404'd — falling back to query-style endpoint.")
+        raw = _request("/v1/airbnb/calendar", params={"id": listing_id, "months": months})
+ 
+    def _parse(raw: dict) -> dict:
+        data = raw.get("data", {})
+        return {
+            "listing_id": data.get("id", listing_id),
+            "calendar": [_parse_calendar_day(d) for d in data.get("calendar", [])],
+        }
+ 
+    return _debug_and_parse("get_airbnb_calendar", raw, _parse)
+ 
+def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, rooms: int) -> dict:
+    """
+    Check live nightly rates per room type for ONE specific hotel_id across
+    given check-in/check-out dates — use this after search_hotels or
+    meta_search has already narrowed things down to a specific property and
+    you want its room-level availability/price rather than re-searching the
+    whole destination.
+    """
+    raw = _request(
+        "/v1/booking/hotel/prices",
+        params={"hotel_id": hotel_id, "check_in": checkin, "check_out": checkout, "adults": adults, "rooms": rooms},
+    )
+ 
+    def _parse(raw: dict) -> dict:
+        data = raw.get("data", {})
+        rooms_data = data.get("rooms", []) if isinstance(data, dict) else []
+        return {
+            "hotel_id": data.get("hotel_id", hotel_id) if isinstance(data, dict) else hotel_id,
+            "checkin": checkin,
+            "checkout": checkout,
+            "rooms": [
+                {
+                    "room_name": r.get("room_name") or r.get("name"),
+                    "price_amount": (r.get("price") or {}).get("amount"),
+                    "price_display": (r.get("price") or {}).get("display"),
+                    "currency": (r.get("price") or {}).get("currency"),
+                    "free_cancellation": r.get("free_cancellation"),
+                    "board_type": r.get("board_type"),
+                    "is_sold_out": r.get("is_sold_out"),
+                }
+                for r in rooms_data
+                if isinstance(r, dict)
+            ],
+        }
+ 
+    return _debug_and_parse("get_hotel_prices", raw, _parse)
+ 
 
+#test 
 
-# #test
 # if __name__ == "__main__":
 #     import sys
 
@@ -299,39 +370,44 @@ def get_airbnb_calendar(listing_id: str, months: int = 3) -> dict:
 
 #     if not os.getenv("STAYAPI_KEY"):
 #         print("Set STAYAPI_KEY before running this. Sign up at https://stayapi.com/users/sign_up")
-#         sys.exit(1)
+    #     sys.exit(1)
 
-#     _print_section("1. lookup_destination — 'Paris'")
-#     dest_result = lookup_destination(query="Paris")
-#     print(dest_result)
+    # _print_section("1. lookup_destination — 'Paris'")
+    # dest_result = lookup_destination(query="Paris")
+    # print(dest_result)
 
-#     dest_id = dest_result["dest_id"]
-#     dest_type = dest_result["dest_type"] or "CITY"
-#     if not dest_id:
-#         print(f"No destination resolved: {dest_result['message']}")
-#         sys.exit(1)
-#     if dest_result["suggestions"]:
-#         print(f"(Ambiguous query — {len(dest_result['suggestions'])} suggestions available, using the first.)")
+    # dest_id = dest_result.get("dest_id")
+    # dest_type = dest_result.get("dest_type") or "CITY"
+    # if not dest_id:
+    #     print(f"No destination resolved — check the RAW lookup_destination output above and share it.")
+    #     sys.exit(1)
+    # if dest_result.get("suggestions"):
+    #     print(f"(Ambiguous query — {len(dest_result['suggestions'])} suggestions available, using the first.)")
 
-#     _print_section(f"2. search_hotels — dest_id={dest_id}, dest_type={dest_type}")
-#     search_result = search_hotels(
-#         HotelSearchInput(
-#             dest_id=dest_id, dest_type=dest_type, checkin="2026-12-10", checkout="2026-12-13", adults=2, rooms=1
-#         )
-#     )
-#     print(search_result)
+    # _print_section(f"2. search_hotels — dest_id={dest_id}, dest_type={dest_type}")
+    # search_result = search_hotels(
+    #     HotelSearchInput(
+    #         dest_id=dest_id, dest_type=dest_type, checkin="2026-12-10", checkout="2026-12-13", adults=2, rooms=1
+    #     )
+    # )
+    # print(search_result)
 
-#     hits = search_result["results"]
-#     if not hits:
-#         print("No hotels returned for that destination/date range.")
-#         sys.exit(0)
-#     first_hotel_id = hits[0]["hotel_id"]
+    # hits = search_result.get("results") or search_result.get("data") or []
+    # hits = [h for h in hits if isinstance(h, dict)]
+    # if not hits:
+    #     print("No parsed hotel hits available — check the RAW search_hotels output above and share it.")
+    #     sys.exit(0)
+    # first_hotel_id = hits[0].get("hotel_id")
+    # first_hotel_name = hits[0].get("hotel_name", "")
 
-#     _print_section(f"3. get_hotel_details — hotel_id={first_hotel_id}")
-#     print(get_hotel_details(hotel_id=first_hotel_id))
+    # _print_section(f"3. get_hotel_details — hotel_id={first_hotel_id}")
+    # print(get_hotel_details(hotel_id=first_hotel_id))
 
-#     _print_section(f"4. get_hotel_reviews — hotel_id={first_hotel_id}")
-#     print(get_hotel_reviews(hotel_id=first_hotel_id, per_page=5))
+    # _print_section(f"4. get_hotel_reviews — hotel_id={first_hotel_id}")
+    # print(get_hotel_reviews(hotel_id=first_hotel_id, per_page=5))
 
-#     _print_section("5. meta_search — cross-OTA links for the same hotel")
-#     print(meta_search(hotel_name=hits[0]["hotel_name"], location="Paris"))
+    # _print_section("5. meta_search — cross-OTA links for the same hotel")
+    # print(meta_search(hotel_name=first_hotel_name, location="Paris"))
+
+    #print(get_airbnb_calendar(listing_id="22120898", months=3))
+    #print(get_hotel_prices(hotel_id="57861", checkin="2026-12-10", checkout="2026-12-13", adults=2, rooms=1))
