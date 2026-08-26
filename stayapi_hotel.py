@@ -1,4 +1,5 @@
 from __future__ import annotations
+from schemas.py import HotelSearchInput
 
 import json
 import os
@@ -59,30 +60,6 @@ def lookup_destination(query: str, language: str = "en-us") -> dict:
 # --------------------------------------------------------------------------- #
 # 2. Search hotels in a destination across given dates
 # --------------------------------------------------------------------------- #
-
-class HotelSearchInput(BaseModel):
-    dest_id: str = Field(..., description="From lookup_destination")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_dest_id(cls, data):
-        # lookup_destination returns dest_id as an int (e.g. -372490);
-        # the search endpoint just wants it as a query string either way.
-        if isinstance(data, dict) and isinstance(data.get("dest_id"), int):
-            data = {**data, "dest_id": str(data["dest_id"])}
-        return data
-
-    dest_type: str = Field("CITY", description="From lookup_destination, e.g. CITY/DISTRICT/AIRPORT/LANDMARK")
-    checkin: str = Field(..., description="YYYY-MM-DD")
-    checkout: str = Field(..., description="YYYY-MM-DD")
-    adults: int = Field(2, ge=1)
-    rooms: int = Field(1, ge=1, le=10)
-    children: int = Field(0, ge=0)
-    children_ages: Optional[list[int]] = Field(None, description="One age per child, only sent if children > 0")
-    rows_per_page: int = Field(25, ge=1, le=100)
-    offset: int = Field(0, ge=0)
-    currency: str = Field("USD")
-
 
 def search_hotels(params: HotelSearchInput) -> dict:
     """
