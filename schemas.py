@@ -203,6 +203,6 @@ class ItineraryPlan(BaseModel):
     trip_overview: TripOverview
     flights: List[Flight]
     hotels: List[Hotel] = Field(description="Recommended hotels with schedule, room pricing, and capacity")
-    daily_itinerary: List[DailyItinerary] = Field(description="Day-by-day plan, same shape as itineraryPlanner.build_itinerary()['days']")
+    daily_itinerary: PlannerItinerary = Field(description="Day-by-day plan, containing destination, dates, and the 'days' array matching the planner output.")
     cost_breakdown: CostBreakdown
     travel_tips: List[str]
