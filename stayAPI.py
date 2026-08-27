@@ -2,7 +2,7 @@ import requests
 
 url = "https://api.stayapi.com/v1/meta/search"
 headers = {
-    "x-api-key": "sk_live_d754d0f7f852166ac9a174e492105d4df25c1fc425791487e0dbe745baa7c11b",
+    "x-api-key": "API",
     "Content-Type": "application/json"
 }
 params = {
