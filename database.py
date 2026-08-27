@@ -5,7 +5,7 @@ from pymongo import MongoClient
 
 load_dotenv()
 
-MONGODB_URI="mongodb+srv://rcjc729_db_user:Cgm9dmX78NCAs6EA@cluster0.8eeicbs.mongodb.net/?appName=Cluster0"
+MONGODB_URI = os.getenv("MONGODB_URI")
 
 if not MONGODB_URI:
     raise ValueError("MONGODB_URI is not set in .env")
