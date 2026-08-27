@@ -243,62 +243,7 @@ def call_llm(system_prompt: str, user_prompt: str) -> dict:
         log.warning("Gemini call failed: %s", e)
         return {}
 
-# ══════════════════════════════════════════════════════════════════════════════
-# DATA STRUCTURES
-# ══════════════════════════════════════════════════════════════════════════════
-
-@dataclass
-class TripConfig:
-    destination: str
-    start_date: str                     
-    end_date: str
-    arrival_datetime: str               
-    departure_datetime: str
-    hotel: dict                         
-    airport: dict 
-    travel_style: str 
-    transport_mode: str
-    group_size: int 
-    budget: str
-    check_in_time: str
-    check_out_time: str              
-    selected_preferences: list = field(default_factory=list)  
-    preferences: dict = field(default_factory=dict)
-    custom_vibe: str = ""
-
-@dataclass
-class Place:
-    id: str
-    name: str
-    location: dict                      
-    types: list[str]
-    primary_type: str = ""
-    rating: float = 0.0
-    user_rating_count: int = 0
-    price_level: str = ""
-    opening_hours: list = field(default_factory=list)
-    visit_duration_min: int = 60
-    score: float = 0.0
-    source: str = ""
-
-@dataclass
-class DayPlan:
-    day_index: int
-    date: str
-    day_type: str                       
-    start_time: datetime = field(default_factory=lambda: datetime(2000, 1, 1, 9))
-    end_time: datetime   = field(default_factory=lambda: datetime(2000, 1, 1, 21))
-    base_location: dict  = field(default_factory=dict)
-    attractions: list    = field(default_factory=list)
-    meals: dict          = field(default_factory=dict)
-    sequence: list       = field(default_factory=list)
-    schedule: list       = field(default_factory=list)
-    valid: bool          = True
-    violations: list     = field(default_factory=list)
-    
-    # ── FIX: Add the missing capacity tracking ──
-    capacity_min: int    = MIN_PER_DAY
-    capacity_max: int    = MAX_PER_DAY
+from schemas import TripConfig, Place, DayPlan
 
 
 # ══════════════════════════════════════════════════════════════════════════════

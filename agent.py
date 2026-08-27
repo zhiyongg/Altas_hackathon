@@ -17,7 +17,7 @@ from langgraph.prebuilt import create_react_agent
 
 # Import schemas and tools from new modules
 from schemas import ItineraryPlan
-from tools import search_flights_atlas, nearby_search, text_search
+from tools import search_flights_atlas, nearby_search, text_search, plan_itinerary
 
 # ==========================================
 # Agent Setup and Execution
@@ -35,15 +35,18 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
     except Exception as e:
         raise e
 
-    tools = [search_flights_atlas, nearby_search, text_search]
+    tools = [search_flights_atlas, nearby_search, text_search, plan_itinerary]
 
     # Use a system message to guide the agent
     system_prompt = '''You are an expert travel planner AI agent.
         Your goal is to build an itinerary based on user input. 
-        You have access to tools for flights (Atlas Flight API) and places (Nearby Search, Text Search).
+        You have access to tools for flights (Atlas Flight API), places (Nearby Search, Text Search), and plan_itinerary to generate a daily itinerary.
 
-        IMPORTANT:
-        Once you have gathered the necessary information, formulate your final answer.
+        IMPORTANT WORKFLOW:
+        1. Search for flights and hotels using the flight and places search tools.
+        2. Call the `plan_itinerary` tool, passing in the flight and hotel parameters, as well as user preferences.
+        3. Combine the generated itinerary with the flights and hotel data to structure the output.
+        Once you have gathered the necessary information, formulate your final answer so it can be parsed into the `ItineraryPlan` schema.
         Ensure you look up real flights and real places using your tools. The price and currency must follow back the tool responses.
         '''
 
