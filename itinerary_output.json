@@ -10,10 +10,11 @@
       "valid": true,
       "schedule": [
         {
-          "time": "18:00",
+          "time": "17:30",
           "name": "Dinner: ICHIRAN Shinjuku Station Central East Exit",
           "kind": "meal",
           "duration_min": 60,
+          "travel_time_min": 1,
           "location": {
             "latitude": 35.690585899999995,
             "longitude": 139.7028052
@@ -31,10 +32,33 @@
           ]
         },
         {
-          "time": "19:04",
+          "time": "18:31",
+          "name": "Shinjuku Golden-Gai",
+          "kind": "attraction",
+          "duration_min": 60,
+          "travel_time_min": 1,
+          "location": {
+            "latitude": 35.6941118,
+            "longitude": 139.70476109999998
+          },
+          "rating": 4.3,
+          "price_level": "",
+          "opening_hours": [
+            "Monday: Open 24 hours",
+            "Tuesday: Open 24 hours",
+            "Wednesday: Open 24 hours",
+            "Thursday: Open 24 hours",
+            "Friday: Open 24 hours",
+            "Saturday: Open 24 hours",
+            "Sunday: Open 24 hours"
+          ]
+        },
+        {
+          "time": "19:31",
           "name": "Return to Hotel",
           "kind": "hotel",
           "duration_min": 0,
+          "travel_time_min": 0,
           "location": {
             "name": "Hotel Gracery Shinjuku",
             "latitude": 35.6938,
@@ -45,7 +69,9 @@
           "opening_hours": []
         }
       ],
-      "attractions": [],
+      "attractions": [
+        "Shinjuku Golden-Gai"
+      ],
       "meals": {
         "dinner": "ICHIRAN Shinjuku Station Central East Exit"
       }
@@ -54,13 +80,14 @@
       "day": 1,
       "date": "2026-09-02",
       "type": "normal",
-      "valid": false,
+      "valid": true,
       "schedule": [
         {
-          "time": "09:04",
+          "time": "09:00",
           "name": "Breakfast: Cafe Aaliya",
           "kind": "meal",
           "duration_min": 60,
+          "travel_time_min": 1,
           "location": {
             "latitude": 35.690497,
             "longitude": 139.7047727
@@ -78,73 +105,33 @@
           ]
         },
         {
-          "time": "11:31",
-          "name": "Tokyo National Museum",
+          "time": "10:02",
+          "name": "Shinjuku Gyoen National Garden",
           "kind": "attraction",
           "duration_min": 120,
+          "travel_time_min": 2,
           "location": {
-            "latitude": 35.7188351,
-            "longitude": 139.7765215
-          },
-          "rating": 4.5,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: Closed",
-            "Tuesday: 9:30 AM – 5:00 PM",
-            "Wednesday: 9:30 AM – 5:00 PM",
-            "Thursday: 9:30 AM – 5:00 PM",
-            "Friday: 9:30 AM – 8:00 PM",
-            "Saturday: 9:30 AM – 8:00 PM",
-            "Sunday: 9:30 AM – 5:00 PM"
-          ]
-        },
-        {
-          "time": "13:42",
-          "name": "Lunch: Gyukatsu Motomura Ueno Branch",
-          "kind": "meal",
-          "duration_min": 60,
-          "location": {
-            "latitude": 35.7104455,
-            "longitude": 139.7744533
-          },
-          "rating": 4.8,
-          "price_level": "PRICE_LEVEL_MODERATE",
-          "opening_hours": [
-            "Monday: 11:00 AM – 10:00 PM",
-            "Tuesday: 11:00 AM – 10:00 PM",
-            "Wednesday: 11:00 AM – 10:00 PM",
-            "Thursday: 11:00 AM – 10:00 PM",
-            "Friday: 11:00 AM – 10:00 PM",
-            "Saturday: 11:00 AM – 10:00 PM",
-            "Sunday: 11:00 AM – 10:00 PM"
-          ]
-        },
-        {
-          "time": "15:55",
-          "name": "teamLab Borderless: MORI Building DIGITAL ART MUSEUM",
-          "kind": "attraction",
-          "duration_min": 120,
-          "location": {
-            "latitude": 35.6620689,
-            "longitude": 139.7432671
+            "latitude": 35.685176299999995,
+            "longitude": 139.7100517
           },
           "rating": 4.6,
           "price_level": "",
           "opening_hours": [
-            "Monday: 8:30 AM – 9:00 PM",
-            "Tuesday: 8:30 AM – 9:00 PM",
-            "Wednesday: 8:30 AM – 9:00 PM",
-            "Thursday: 8:30 AM – 9:00 PM",
-            "Friday: 8:30 AM – 9:00 PM",
-            "Saturday: 8:30 AM – 9:00 PM",
-            "Sunday: 8:30 AM – 9:00 PM"
+            "Monday: Closed",
+            "Tuesday: 9:00 AM – 6:00 PM",
+            "Wednesday: 9:00 AM – 6:00 PM",
+            "Thursday: 9:00 AM – 6:00 PM",
+            "Friday: 9:00 AM – 6:00 PM",
+            "Saturday: 9:00 AM – 6:00 PM",
+            "Sunday: 9:00 AM – 6:00 PM"
           ]
         },
         {
-          "time": "18:46",
+          "time": "12:06",
           "name": "Meiji Jingu",
           "kind": "attraction",
           "duration_min": 60,
+          "travel_time_min": 4,
           "location": {
             "latitude": 35.6763976,
             "longitude": 139.6993259
@@ -154,44 +141,99 @@
           "opening_hours": []
         },
         {
-          "time": "20:07",
-          "name": "NEOShinjuku Atsushi",
-          "kind": "attraction",
+          "time": "13:19",
+          "name": "Lunch: Tokyo American Club",
+          "kind": "meal",
           "duration_min": 60,
+          "travel_time_min": 13,
           "location": {
-            "latitude": 35.6906964,
-            "longitude": 139.7060071
+            "latitude": 35.6586213,
+            "longitude": 139.7414636
           },
-          "rating": 4.6,
-          "price_level": "PRICE_LEVEL_MODERATE",
+          "rating": 4.4,
+          "price_level": "",
           "opening_hours": [
-            "Monday: 6:00 – 11:00 PM",
-            "Tuesday: 6:00 – 11:00 PM",
-            "Wednesday: 12:00 – 5:00 PM, 6:00 – 11:00 PM",
-            "Thursday: 12:00 – 5:00 PM, 6:00 – 11:00 PM",
-            "Friday: 12:00 – 5:00 PM, 6:00 – 11:00 PM",
-            "Saturday: 12:00 – 5:00 PM, 6:00 – 11:00 PM",
-            "Sunday: 12:00 – 5:00 PM, 6:00 – 11:00 PM"
+            "Monday: 5:45 AM – 11:00 PM",
+            "Tuesday: 5:45 AM – 11:00 PM",
+            "Wednesday: 5:45 AM – 11:00 PM",
+            "Thursday: 5:45 AM – 11:00 PM",
+            "Friday: 5:45 AM – 11:00 PM",
+            "Saturday: 5:45 AM – 11:00 PM",
+            "Sunday: 5:45 AM – 11:00 PM"
           ]
         },
         {
-          "time": "21:14",
-          "name": "Dinner: TOHO Cinemas Shinjuku",
-          "kind": "meal",
-          "duration_min": 60,
+          "time": "14:20",
+          "name": "Tokyo Tower",
+          "kind": "attraction",
+          "duration_min": 120,
+          "travel_time_min": 1,
           "location": {
-            "latitude": 35.6951588,
-            "longitude": 139.70205389999998
+            "latitude": 35.6585805,
+            "longitude": 139.7454329
           },
-          "rating": 4.1,
+          "rating": 4.5,
           "price_level": "",
-          "opening_hours": []
+          "opening_hours": [
+            "Monday: 9:00 AM – 11:00 PM",
+            "Tuesday: 9:00 AM – 11:00 PM",
+            "Wednesday: 9:00 AM – 11:00 PM",
+            "Thursday: 9:00 AM – 11:00 PM",
+            "Friday: 9:00 AM – 11:00 PM",
+            "Saturday: 9:00 AM – 11:00 PM",
+            "Sunday: 9:00 AM – 11:00 PM"
+          ]
         },
         {
-          "time": "22:16",
+          "time": "16:32",
+          "name": "teamLab Planets TOKYO DMM",
+          "kind": "attraction",
+          "duration_min": 120,
+          "travel_time_min": 12,
+          "location": {
+            "latitude": 35.6491207,
+            "longitude": 139.7897739
+          },
+          "rating": 4.5,
+          "price_level": "",
+          "opening_hours": [
+            "Monday: 8:00 AM – 10:00 PM",
+            "Tuesday: 8:00 AM – 10:00 PM",
+            "Wednesday: 8:00 AM – 10:00 PM",
+            "Thursday: 8:00 AM – 10:00 PM",
+            "Friday: 8:00 AM – 10:00 PM",
+            "Saturday: 8:00 AM – 10:00 PM",
+            "Sunday: 8:00 AM – 10:00 PM"
+          ]
+        },
+        {
+          "time": "18:35",
+          "name": "Dinner: Sushi Dai",
+          "kind": "meal",
+          "duration_min": 60,
+          "travel_time_min": 3,
+          "location": {
+            "latitude": 35.6443009,
+            "longitude": 139.7824528
+          },
+          "rating": 4.5,
+          "price_level": "PRICE_LEVEL_MODERATE",
+          "opening_hours": [
+            "Monday: 6:00 AM – 2:00 PM",
+            "Tuesday: 6:00 AM – 2:00 PM",
+            "Wednesday: Closed",
+            "Thursday: 6:00 AM – 2:00 PM",
+            "Friday: 6:00 AM – 2:00 PM",
+            "Saturday: 6:00 AM – 2:00 PM",
+            "Sunday: Closed"
+          ]
+        },
+        {
+          "time": "20:02",
           "name": "Return to Hotel",
           "kind": "hotel",
           "duration_min": 0,
+          "travel_time_min": 27,
           "location": {
             "name": "Hotel Gracery Shinjuku",
             "latitude": 35.6938,
@@ -203,15 +245,15 @@
         }
       ],
       "attractions": [
-        "Tokyo National Museum",
-        "teamLab Borderless: MORI Building DIGITAL ART MUSEUM",
+        "Shinjuku Gyoen National Garden",
         "Meiji Jingu",
-        "NEOShinjuku Atsushi"
+        "Tokyo Tower",
+        "teamLab Planets TOKYO DMM"
       ],
       "meals": {
         "breakfast": "Cafe Aaliya",
-        "lunch": "Gyukatsu Motomura Ueno Branch",
-        "dinner": "TOHO Cinemas Shinjuku"
+        "lunch": "Tokyo American Club",
+        "dinner": "Sushi Dai"
       }
     },
     {
@@ -221,10 +263,11 @@
       "valid": true,
       "schedule": [
         {
-          "time": "09:06",
+          "time": "08:01",
           "name": "Breakfast: Blue Bottle Coffee - Shinjuku Cafe",
           "kind": "meal",
           "duration_min": 60,
+          "travel_time_min": 2,
           "location": {
             "latitude": 35.6887927,
             "longitude": 139.70211519999998
@@ -242,31 +285,77 @@
           ]
         },
         {
-          "time": "11:30",
-          "name": "Lunch: Shinjuku Takashimaya",
-          "kind": "meal",
-          "duration_min": 60,
+          "time": "09:08",
+          "name": "Yoyogi Park",
+          "kind": "attraction",
+          "duration_min": 120,
+          "travel_time_min": 7,
           "location": {
-            "latitude": 35.6876335,
-            "longitude": 139.7022399
+            "latitude": 35.6700649,
+            "longitude": 139.6949656
           },
-          "rating": 4,
+          "rating": 4.4,
           "price_level": "",
           "opening_hours": [
-            "Monday: 10:30 AM – 7:30 PM",
-            "Tuesday: 10:30 AM – 7:30 PM",
-            "Wednesday: 10:30 AM – 7:30 PM",
-            "Thursday: 10:30 AM – 7:30 PM",
-            "Friday: 10:30 AM – 7:30 PM",
-            "Saturday: 10:30 AM – 7:30 PM",
-            "Sunday: 10:30 AM – 7:30 PM"
+            "Monday: Open 24 hours",
+            "Tuesday: Open 24 hours",
+            "Wednesday: Open 24 hours",
+            "Thursday: Open 24 hours",
+            "Friday: Open 24 hours",
+            "Saturday: Open 24 hours",
+            "Sunday: Open 24 hours"
           ]
         },
         {
-          "time": "12:38",
+          "time": "11:23",
+          "name": "Yasukuni Shrine",
+          "kind": "attraction",
+          "duration_min": 60,
+          "travel_time_min": 15,
+          "location": {
+            "latitude": 35.694136,
+            "longitude": 139.74384899999998
+          },
+          "rating": 4.4,
+          "price_level": "",
+          "opening_hours": [
+            "Monday: 6:00 AM – 6:00 PM",
+            "Tuesday: 6:00 AM – 6:00 PM",
+            "Wednesday: 6:00 AM – 6:00 PM",
+            "Thursday: 6:00 AM – 6:00 PM",
+            "Friday: 6:00 AM – 6:00 PM",
+            "Saturday: 6:00 AM – 6:00 PM",
+            "Sunday: 6:00 AM – 6:00 PM"
+          ]
+        },
+        {
+          "time": "12:27",
+          "name": "Lunch: Curry Bondy",
+          "kind": "meal",
+          "duration_min": 60,
+          "travel_time_min": 4,
+          "location": {
+            "latitude": 35.6955738,
+            "longitude": 139.7573664
+          },
+          "rating": 4.3,
+          "price_level": "PRICE_LEVEL_MODERATE",
+          "opening_hours": [
+            "Monday: 11:00 AM – 9:30 PM",
+            "Tuesday: 11:00 AM – 9:30 PM",
+            "Wednesday: 11:00 AM – 9:30 PM",
+            "Thursday: 11:00 AM – 9:30 PM",
+            "Friday: 11:00 AM – 9:30 PM",
+            "Saturday: 10:00 AM – 9:30 PM",
+            "Sunday: 10:00 AM – 9:30 PM"
+          ]
+        },
+        {
+          "time": "13:41",
           "name": "Return to Hotel",
           "kind": "hotel",
           "duration_min": 0,
+          "travel_time_min": 15,
           "location": {
             "name": "Hotel Gracery Shinjuku",
             "latitude": 35.6938,
@@ -277,10 +366,13 @@
           "opening_hours": []
         }
       ],
-      "attractions": [],
+      "attractions": [
+        "Yoyogi Park",
+        "Yasukuni Shrine"
+      ],
       "meals": {
         "breakfast": "Blue Bottle Coffee - Shinjuku Cafe",
-        "lunch": "Shinjuku Takashimaya"
+        "lunch": "Curry Bondy"
       }
     }
   ]
