@@ -17,11 +17,7 @@ from langgraph.prebuilt import create_react_agent
 
 # Import schemas and tools from new modules
 from schemas import ItineraryPlan
-from tools import (
-    search_flights_atlas, nearby_search, text_search,
-    lookup_destination, search_hotels, meta_search,
-    get_hotel_details, get_hotel_prices,
-)
+from tools import search_flights_atlas, nearby_search, text_search, plan_itinerary, get_hotel_prices, search_hotels
 
 # ==========================================
 # Agent Setup and Execution
@@ -39,58 +35,19 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
     except Exception as e:
         raise e
 
-    tools = [
-        search_flights_atlas, nearby_search, text_search,
-        lookup_destination, search_hotels, meta_search,
-        get_hotel_details, get_hotel_prices,
-    ]
+    tools = [search_flights_atlas, nearby_search, text_search, plan_itinerary, get_hotel_prices, search_hotels]
 
     # Use a system message to guide the agent
     system_prompt = '''You are an expert travel planner AI agent.
-        Your goal is to build a rich, detailed itinerary based on user input.
-        You have access to tools for flights (Atlas Flight API), places/attractions (Google Nearby Search, Text Search),
-        and hotels/accommodation (StayAPI).
+        Your goal is to build an itinerary based on user input. 
+        You have access to tools for flights (Atlas Flight API), hotels (StayAPI), places (Nearby Search, Text Search), and plan_itinerary to generate a daily itinerary.
 
-        CRITICAL — ITINERARY DENSITY:
-        Every single day MUST contain AT LEAST 5 activities following this pattern:
-
-        Each day structure:
-        1. Breakfast restaurant (morning)
-        2. Attraction / activity (late morning)
-        3. Attraction / activity (midday)
-        4. Lunch restaurant (early afternoon)
-        5. Attraction / activity (afternoon)
-        6. Attraction / activity (late afternoon)
-        7. Dinner restaurant (evening)
-
-        That is 7 activities minimum per full day. Arrival/departure days may have fewer
-        but still need at least 3 activities if there is time.
-
-        You MUST call text_search or nearby_search MULTIPLE times per day to find
-        different restaurants and attractions. Do NOT reuse the same tool result for
-        multiple activities. Each activity needs its own unique real place.
-
-        ANTI-PATTERNS — NEVER do these:
-        - A day with only 1 or 2 activities
-        - Repeating the same place across different time slots
-        - Listing a restaurant without actually searching for one
-
-        FLIGHT SEARCH:
-        1. Use search_flights_atlas to find real outbound and return flights matching the trip dates.
-        2. Include flight details, pricing, and timing in the final output.
-
-        HOTEL SEARCH (do this AFTER planning activities, keep it efficient):
-        1. Use lookup_destination to get dest_id and dest_type for the destination city.
-        2. Use search_hotels with the trip dates to find a suitable hotel.
-        3. Pick ONE best hotel based on rating, price, and proximity to planned activities.
-        4. Use get_hotel_prices to fetch all room types. Select the best room as "selected_room"
-           and include other room types detail in "available_rooms".
-        5. Populate the hotel\'s "stay_schedule" with check-in/out dates, times, and total nights.
-
-        IMPORTANT:
-        - All prices and currencies must come from real tool responses.
-        - The final answer must include flights, a full multi-activity daily itinerary,
-          one hotel with room details, other available rooms, a cost breakdown, and travel tips.
+        IMPORTANT WORKFLOW:
+        1. Search for flights and hotels using the flight, hotel and places search tools.
+        2. Call the `plan_itinerary` tool, passing in the flight and hotel parameters, as well as user preferences.
+        3. Combine the generated itinerary with the flights and hotel data to structure the output.
+        Once you have gathered the necessary information, formulate your final answer so it can be parsed into the `ItineraryPlan` schema.
+        Ensure you look up real flights and real places using your tools. The price and currency must follow back the tool responses.
         '''
 
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))

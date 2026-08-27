@@ -262,6 +262,55 @@ def text_search(query: str) -> str:
     except Exception as e:
         return json.dumps({"error": f"API Error: {str(e)}"})
 
+@tool
+def plan_itinerary(
+    destination: str, 
+    start_date: str, 
+    end_date: str, 
+    arrival_datetime: str, 
+    departure_datetime: str, 
+    hotel_name: str, 
+    hotel_lat: float, 
+    hotel_lng: float, 
+    preferences: list[str]
+) -> str:
+    """
+    Plan the daily itinerary of attractions and meals. 
+    Call this AFTER finding flights and a hotel to combine them into an itinerary.
+    Args:
+        destination: The destination city
+        start_date: YYYY-MM-DD
+        end_date: YYYY-MM-DD
+        arrival_datetime: YYYY-MM-DDTHH:MM:SS
+        departure_datetime: YYYY-MM-DDTHH:MM:SS
+        hotel_name: The name of the chosen hotel
+        hotel_lat: Latitude of the hotel
+        hotel_lng: Longitude of the hotel
+        preferences: List of strings for travel preferences (e.g. ['culture', 'food', 'scenery'])
+    """
+    from itineraryPlanner import build_itinerary, TripConfig
+    
+    cfg = TripConfig(
+        destination=destination,
+        start_date=start_date,
+        end_date=end_date,
+        arrival_datetime=arrival_datetime,
+        departure_datetime=departure_datetime,
+        hotel={"name": hotel_name, "latitude": hotel_lat, "longitude": hotel_lng},
+        airport={},
+        selected_preferences=preferences,
+        travel_style="moderate",
+        transport_mode="TRANSIT",
+        group_size=2,
+        budget="medium",
+        check_in_time="14:00",
+        check_out_time="11:00",
+        custom_vibe=""
+    )
+    
+    result = build_itinerary(cfg)
+    return json.dumps(result)
+
 # ==========================================
 # StayAPI Helper
 # ==========================================
