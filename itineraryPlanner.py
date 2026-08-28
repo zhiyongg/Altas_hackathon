@@ -461,7 +461,7 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
 
             # Start touring at 8 AM, OR the check-out time (whichever is earlier)
             start_time = min(default_start, checkout_dt)
-            end_time = departure_dt - timedelta(hours=3)
+            end_time = departure_dt - timedelta(hours=4)
         else:
             start_time = base.replace(hour=8, minute=0)
             end_time = base.replace(hour=21, minute=0)
@@ -1208,13 +1208,26 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
             "meal_name": meal_name,
         })
 
-    # 3. Build route destinations: hotel + attractions + meals + hotel
+    # 3. Build route destinations: hotel + attractions + meals + final destination
     waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel"}]
     for p in day.attractions:
         waypoints.append({"name": p.name, "location": dict(p.location),
                           "kind": "attraction", "place": p})
     waypoints.extend(meal_waypoints)
-    waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
+    
+    # ── FIX: Route straight to the Airport on departure day ──
+    if day.day_type == "departure":
+        waypoints.append({
+            "name": f"Depart for Airport ({cfg.airport.get('name', 'Airport')})", 
+            "location": dict(cfg.airport), 
+            "kind": "airport"
+        })
+    else:
+        waypoints.append({
+            "name": end_name, 
+            "location": dict(cfg.hotel), 
+            "kind": "hotel"
+        })
 
     # 4. ONE route matrix over all waypoints (controls API usage)
     matrix = DayRouteMatrix(cfg, waypoints)
@@ -1361,20 +1374,17 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         })
         cur, prev = depart, loc
 
-    last_loc = day.sequence[-1]["location"]
-    ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
-    if schedule and ret_s > 0:
-        schedule[-1]["transit_to_next"] = {
-            "mode": cfg.transport_mode.lower(),
-            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> Return to Hotel"
-        }
+    last_wp = day.sequence[-1]
+    last_loc = last_wp["location"]
+    ret_s = last_wp.get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
     schedule.append({
-        "name": "Return to Hotel", "kind": "hotel",
+        "name": last_wp["name"], 
+        "kind": last_wp["kind"], 
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
         "rating": None, "price_level": None, "opening_hours": []
     })
-
+    
     day.schedule = schedule
     return schedule
 
@@ -1458,6 +1468,20 @@ def validate_day(day: DayPlan) -> tuple[bool, list[str]]:
     # ── Chronological meal order: lunch must precede dinner ──
     if "Lunch" in meal_times and "Dinner" in meal_times and meal_times["Lunch"] >= meal_times["Dinner"]:
         v.append("Meals out of order: lunch must precede dinner")
+
+    # ── STRICT GOAL 1: Mandatory meals on normal days ──
+    if day.day_type == "normal":
+        if "Breakfast" not in meal_times: v.append("Missing mandatory Breakfast")
+        if "Lunch" not in meal_times: v.append("Missing mandatory Lunch")
+        if "Dinner" not in meal_times: v.append("Missing mandatory Dinner")
+
+    # ── STRICT GOAL 2: 3 hours before flight ──
+    if day.day_type == "departure" and day.schedule:
+        airport_arr = day.schedule[-1]["arrival"]
+        dep_dt = parse_dt(cfg.departure_datetime)
+        limit_dt = dep_dt - timedelta(hours=3)
+        if airport_arr > limit_dt:
+            v.append(f"Airport arrival {fmt_time(airport_arr)} is less than 3 hours before flight {fmt_time(dep_dt)}")
 
     day.valid = len(v) == 0
     day.violations = v
