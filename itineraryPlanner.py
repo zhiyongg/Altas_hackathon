@@ -61,11 +61,11 @@ def cached(fn):
     return wrapper
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-DISCOVERY_RADIUS_M   = 15_000       
+DISCOVERY_RADIUS_M   = 15_000
 MIN_PER_DAY          = 3
 MAX_PER_DAY          = 7
 
-# Meal scheduling policy 
+# Meal scheduling policy
 
 MEAL_TARGETS = {
     "breakfast": dtime(8, 0),
@@ -90,21 +90,21 @@ MEAL_SOFT_TOLERANCE_MIN = {
 # Streamlined list of universal Google Places Table A search types
 ATTRACTION_TYPES = [
     # The Catch-Alls (Catches monuments, castles, plazas, observation decks, etc.)
-    "tourist_attraction", 
-    "historical_landmark", 
+    "tourist_attraction",
+    "historical_landmark",
     "cultural_landmark",
-    
+
     # Arts & Education (Catches history/science/art museums and planetariums)
-    "museum", 
+    "museum",
     "art_gallery",
-    
+
     # Nature (Catches gardens, preserves, hiking areas, and city parks)
-    "park", 
+    "park",
     "national_park",
-    
+
     # Entertainment & Family (Catches water parks, theme parks, animal sanctuaries)
-    "amusement_park", 
-    "zoo", 
+    "amusement_park",
+    "zoo",
     "aquarium"
 ]
 
@@ -117,18 +117,18 @@ TRAVEL_STYLE_CAPACITY = {
 # FOR LOCAL SCORING (Maps Google's returned types to your UI categories)
 THEME_TO_TYPES = {
     "culture":       ["museum", "history_museum", "art_museum", "historical_place",
-                      "historical_landmark", "cultural_landmark", "castle", 
-                      "monument", "art_gallery", "shinto_shrine", "buddhist_temple", 
+                      "historical_landmark", "cultural_landmark", "castle",
+                      "monument", "art_gallery", "shinto_shrine", "buddhist_temple",
                       "church", "mosque"],
     "scenery":       ["national_park", "state_park", "park", "botanical_garden",
                       "nature_preserve", "beach", "lake", "mountain_peak",
                       "wildlife_park", "zoo", "aquarium"],
-    "food":          ["restaurant", "cafe", "bakery", "food_court", 
+    "food":          ["restaurant", "cafe", "bakery", "food_court",
                       "fine_dining_restaurant", "family_restaurant", "market"],
     "shopping":      ["shopping_mall", "market", "department_store", "gift_shop",
                       "book_store", "flea_market", "farmers_market"],
     "entertainment": ["amusement_park", "water_park", "movie_theater", "bowling_alley",
-                      "karaoke", "concert_hall", "live_music_venue", "comedy_club", 
+                      "karaoke", "concert_hall", "live_music_venue", "comedy_club",
                       "arcade", "night_club", "bar", "cocktail_bar", "pub", "wine_bar"],
     "adventure":     ["hiking_area", "adventure_sports_center", "cycling_park",
                       "ski_resort", "golf_course", "sports_activity_location"],
@@ -193,13 +193,13 @@ def haversine_km(a: dict, b: dict) -> float:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GOOGLE API WRAPPERS  
+# GOOGLE API WRAPPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _places_headers():
     fields = [
         "places.id", "places.displayName", "places.location",
-        # "places.formattedAddress", 
+        "places.formattedAddress",
         "places.rating",
         "places.regularOpeningHours.weekdayDescriptions",
         "places.priceLevel", "places.primaryType", "places.types",
@@ -210,6 +210,18 @@ def _places_headers():
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask": ",".join(fields),
     }
+
+def _safe_post(url: str, headers: dict, json_payload: dict, max_retries: int = 3):
+    import time
+    for attempt in range(max_retries):
+        try:
+            return requests.post(url, headers=headers, json=json_payload, timeout=15)
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                log.error("API call failed after %d retries: %s", max_retries, e)
+                return None
+            time.sleep(1 + attempt)
+    return None
 
 @cached
 def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
@@ -222,9 +234,9 @@ def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
         },
     }
     if included_types: payload["includedTypes"] = included_types
-    resp = requests.post(url, headers=_places_headers(), json=payload)
-    if resp.status_code != 200:
-        log.warning("Nearby Search %s: %s", resp.status_code, resp.text)
+    resp = _safe_post(url, headers=_places_headers(), json_payload=payload)
+    if not resp or resp.status_code != 200:
+        log.warning("Nearby Search %s: %s", resp.status_code if resp else "Failed", resp.text if resp else "No Response")
         return []
     return resp.json().get("places", [])
 
@@ -232,9 +244,9 @@ def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
 def search_text(query: str, max_results: int = 10) -> list[dict]:
     url = "https://places.googleapis.com/v1/places:searchText"
     payload = {"textQuery": query, "pageSize": max_results}
-    resp = requests.post(url, headers=_places_headers(), json=payload)
-    if resp.status_code != 200:
-        log.warning("Text Search %s: %s", resp.status_code, resp.text)
+    resp = _safe_post(url, headers=_places_headers(), json_payload=payload)
+    if not resp or resp.status_code != 200:
+        log.warning("Text Search %s: %s", resp.status_code if resp else "Failed", resp.text if resp else "No Response")
         return []
     return resp.json().get("places", [])
 
@@ -286,7 +298,7 @@ def compute_route_matrix(origins: list[dict], destinations: list[dict],
     def _clean_ll(loc): return {"latitude": loc["latitude"], "longitude": loc["longitude"]}
 
     combined_results = []
-    
+
     # Determine the maximum safe chunk size based on destinations
     # e.g., 100 limit // 13 destinations = 7 origins max per API call
     max_elements = 100
@@ -308,26 +320,26 @@ def compute_route_matrix(origins: list[dict], destinations: list[dict],
         elif travel_mode == "DRIVE":
             payload["routingPreference"] = routing_pref
 
-        resp = requests.post(url, headers=headers, json=payload)
-        if resp.status_code != 200:
-            log.warning("Route Matrix 400: %s", resp.text)
+        resp = _safe_post(url, headers=headers, json_payload=payload)
+        if not resp or resp.status_code != 200:
+            log.warning("Route Matrix 400: %s", resp.text if resp else "Failed")
             continue
-            
+
         data = resp.json()
 
-        # 3. Store EVERY returned edge, and adjust the originIndex so the 
+        # 3. Store EVERY returned edge, and adjust the originIndex so the
         # local chunks seamlessly map back to the global routing array.
         for e in data:
             local_oi = e.get("originIndex")
             di = e.get("destinationIndex")
-            
+
             if local_oi is not None and di is not None:
                 global_oi = i + local_oi  # Remap relative chunk index back to absolute
-                
+
                 # Update the JSON payload with the true global origin
                 e["originIndex"] = global_oi
                 combined_results.append(e)
-                
+
                 # Save to cache
                 key = (travel_mode, routing_pref, _ll(origins[global_oi]), _ll(destinations[di]))
                 _EDGE_CACHE[key] = parse_dur(e.get("duration"))
@@ -336,7 +348,7 @@ def compute_route_matrix(origins: list[dict], destinations: list[dict],
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LLM WRAPPER  
+# LLM WRAPPER
 # ══════════════════════════════════════════════════════════════════════════════
 
 @cached
@@ -363,19 +375,19 @@ def call_llm(system_prompt: str, user_prompt: str) -> dict:
 @dataclass
 class TripConfig:
     destination: str
-    start_date: str                     
+    start_date: str
     end_date: str
-    arrival_datetime: str               
+    arrival_datetime: str
     departure_datetime: str
-    hotel: dict                         
-    airport: dict 
-    travel_style: str 
+    hotel: dict
+    airport: dict
+    travel_style: str
     transport_mode: str
-    group_size: int 
+    group_size: int
     budget: str
     check_in_time: str
-    check_out_time: str              
-    selected_preferences: list = field(default_factory=list)  
+    check_out_time: str
+    selected_preferences: list = field(default_factory=list)
     preferences: dict = field(default_factory=dict)
     custom_vibe: str = ""
 
@@ -383,7 +395,7 @@ class TripConfig:
 class Place:
     id: str
     name: str
-    location: dict                      
+    location: dict
     types: list[str]
     primary_type: str = ""
     rating: float = 0.0
@@ -489,14 +501,14 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
 
             # Calculate max places mathematically
             calculated_max = int(active_touring_hours / hrs_per_stop)
-            
+
             # ── FIX: Respect the dictionary limits for arrival/departure ──
             # Fetch the strict cap from your TRAVEL_STYLE_CAPACITY (e.g., 2)
-            dict_limit = style_caps.get(dtype, 2) 
-            
+            dict_limit = style_caps.get(dtype, 2)
+
             # Force the engine to take the lowest number (Math vs Dictionary)
             d.capacity_max = min(dict_limit, max(0, calculated_max))
-            
+
             # Require at least 1 attraction if there is time, otherwise 0
             d.capacity_min = min(1, d.capacity_max)
 
@@ -508,35 +520,35 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
 
 def get_meal_slots(dp: DayPlan) -> list[tuple]:
     """
-    Universally calculates applicable meal slots based on the day's 
+    Universally calculates applicable meal slots based on the day's
     actual start and end times (derived from arrival/departure/normal schedules).
     Returns [(meal_name, target_datetime, context_label), ...]
     """
     slots = []
     base = datetime.strptime(dp.date, "%Y-%m-%d")
-    
+
     start_t = dp.start_time.time()
     end_t = dp.end_time.time()
-    
+
     # Standard meal target datetimes
     b_time = base.replace(hour=8, minute=0)
     l_time = base.replace(hour=12, minute=30)
     d_time = base.replace(hour=18, minute=30)
-    
+
     # 1. Breakfast: Included if the day starts by 9:00 AM
     if start_t <= dtime(9, 0):
         slots.append(("breakfast", b_time, "hotel"))
-        
+
     # 2. Lunch: Included if the user is active through the midday window (12:30 - 13:30)
     if start_t <= dtime(12, 30) and end_t >= dtime(13, 30):
         slots.append(("lunch", l_time, "attraction"))
-        
+
     # 3. Dinner: Included if the day extends past 6:30 PM
     if end_t >= dtime(18, 30):
         # If it's an arrival day ending late, eat near hotel; otherwise near attractions
         context = "hotel" if dp.day_type == "arrival" else "attraction"
         slots.append(("dinner", d_time, context))
-        
+
     return slots
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -556,49 +568,54 @@ def build_discovery_pool(cfg: TripConfig, max_candidates: int) -> dict:
 
 def _get_dynamic_duration(place_types: list[str], primary: str, travel_style: str) -> int:
     long_visits = {
-        "amusement_park", "theme_park", "national_park", "zoo", 
+        "amusement_park", "theme_park", "national_park", "zoo",
         "aquarium", "ski_resort", "golf_course", "hiking_area", "water_park"
     }
     medium_visits = {
-        "museum", "history_museum", "art_museum", "park", "shopping_mall", 
-        "botanical_garden", "art_gallery", "castle", "historical_place", 
+        "museum", "history_museum", "art_museum", "park", "shopping_mall",
+        "botanical_garden", "art_gallery", "castle", "historical_place",
         "performing_arts_theater", "department_store", "spa", "market"
     }
-    
+
     base = 60
     for t in [primary] + place_types:
-        if t in long_visits: 
+        if t in long_visits:
             base = 180
             break
-        if t in medium_visits: 
+        if t in medium_visits:
             base = 120
             break
-            
+
     # Apply pacing multiplier
     if travel_style == "packed":
         return int(base * 0.75)  # e.g., 120 mins -> 90 mins
     elif travel_style == "relaxed":
         return int(base * 1.25)  # e.g., 120 mins -> 150 mins
-        
+
     return base
 
 def _raw_to_place(raw: dict, source="api", travel_style: str = "moderate") -> Place | None:
     loc = raw.get("location", {})
     if not loc.get("latitude"): return None
-    
+
     types_list = raw.get("types", [])
     primary = raw.get("primaryType", "")
-    
+
     # Keep meals at a strict 60 min minimum so we don't trigger validation errors,
     # but allow attractions to scale freely based on travel style.
     if source == "meal":
         dur = 75 if travel_style == "relaxed" else 60
     else:
         dur = _get_dynamic_duration(types_list, primary, travel_style)
-        
+
     return Place(
         id=raw.get("id", ""), name=raw.get("displayName", {}).get("text", "Unknown"),
-        location={"latitude": loc["latitude"], "longitude": loc["longitude"]},
+        location={
+            "latitude": loc["latitude"],
+            "longitude": loc["longitude"],
+            "name": raw.get("displayName", {}).get("text", "Unknown"),
+            "address": raw.get("formattedAddress", "")
+        },
         types=types_list, primary_type=primary,
         rating=raw.get("rating", 0.0), user_rating_count=raw.get("userRatingCount", 0),
         price_level=raw.get("priceLevel", ""),
@@ -620,7 +637,7 @@ def discover_candidates(cfg: TripConfig, pool: dict) -> list[Place]:
     for theme in themes[:pool["n_theme_searches"]]:
         for raw in search_text(f"{theme} attractions in {cfg.destination}",
                                 max_results=pool["text_results_per_theme"]):
-            p = _raw_to_place(raw, "text", cfg.travel_style) 
+            p = _raw_to_place(raw, "text", cfg.travel_style)
             if p and p.id not in seen and p.primary_type not in banned_primary_types:
                 seen.add(p.id)
                 places.append(p)
@@ -665,7 +682,7 @@ def discover_candidates(cfg: TripConfig, pool: dict) -> list[Place]:
 
 def _budget_score(p: Place, budget: str) -> float:
     allowed = BUDGET_PRICE_LEVELS.get(budget.lower(), set())
-    if not p.price_level:  
+    if not p.price_level:
         # unknown price → neutral, don't punish
         return 0.5
     return 1.0 if p.price_level in allowed else 0.2
@@ -679,10 +696,10 @@ def _score_place(p: Place, prefs: dict, hotel_loc: dict, budget: str) -> float:
     pop_s    = min(math.log(p.user_rating_count + 1) / 10.0, 1.0)
     dist     = haversine_km(p.location, hotel_loc)
     conv_s   = max(1.0 - dist / (DISCOVERY_RADIUS_M / 1000), 0.0)
-    
+
     # Apply new budget score
     budget_s = _budget_score(p, budget)
-    
+
     return (SCORE_W["pref"] * pref_s + SCORE_W["rating"] * rating_s +
             SCORE_W["popularity"] * pop_s + SCORE_W["convenience"] * conv_s +
             SCORE_W["budget"] * budget_s)
@@ -735,12 +752,12 @@ def _is_duplicate_place(p1: Place, p2: Place) -> bool:
 
 def filter_candidates(places: list[Place], cfg: TripConfig, max_candidates: int) -> list[Place]:
     # 1. Score all places
-    for p in places: 
+    for p in places:
         p.score = _score_place(p, cfg.preferences, cfg.hotel, cfg.budget)
-        
+
     # 2. Sort highest to lowest
     places.sort(key=lambda x: x.score, reverse=True)
-    
+
     # ── FIX: Deduplicate Similar Names ──
     unique_places = []
     for p in places:
@@ -751,11 +768,11 @@ def filter_candidates(places: list[Place], cfg: TripConfig, max_candidates: int)
                 log.info(f"Deduplication: Dropped '{p.name}' because it is too similar to '{u.name}'")
                 is_dup = True
                 break
-        
+
         if not is_dup:
             unique_places.append(p)
     # ────────────────────────────────────
-    
+
     # 3. Cut to max candidates
     out = unique_places[:max_candidates]
     log.info("Filtered → %d candidates (min score %.2f).", len(out), out[-1].score if out else 0)
@@ -767,26 +784,26 @@ def filter_candidates(places: list[Place], cfg: TripConfig, max_candidates: int)
 
 def cluster_places(places: list[Place], n_clusters: int) -> list[list[Place]]:
     if not places: return []
-    
+
     # If we have fewer places than target clusters, just put each place in its own cluster
     if len(places) <= n_clusters:
         return [[p] for p in places]
 
     # Extract coordinates for the ML model
     coords = np.array([[p.location["latitude"], p.location["longitude"]] for p in places])
-    
+
     # Suppress Windows thread leak warning for KMeans
     os.environ["OMP_NUM_THREADS"] = "1"
-    
+
     # Run K-Means Clustering
     kmeans = KMeans(n_clusters=n_clusters, init='k-means++', n_init=10, random_state=42)
     labels = kmeans.fit_predict(coords)
-    
+
     # Group the places into their new mathematically optimized zones
     clusters = [[] for _ in range(n_clusters)]
     for place, label in zip(places, labels):
         clusters[label].append(place)
-        
+
     # Sort zones by density (largest cluster first)
     return sorted(clusters, key=len, reverse=True)
 
@@ -807,7 +824,7 @@ def select_places_llm(candidates: list[Place], cfg: TripConfig, n_days: int) -> 
     # Count how many normal vs partial days we have
     normal_days = sum(1 for d in classify_days(cfg) if d.day_type == "normal")
     arrival_departure_days = n_days - normal_days
-    
+
     # DYNAMIC TARGET: e.g., 4 per normal day, 1-2 for arrival/departure
     target = (normal_days * 4) + (arrival_departure_days * 1)
     target = max(MIN_PER_DAY, target) # Ensure we always pick at least a minimum
@@ -828,16 +845,16 @@ def select_places_llm(candidates: list[Place], cfg: TripConfig, n_days: int) -> 
         f"Preference Scores: {json.dumps(cfg.preferences, indent=2)}\n"
         f"Candidates:\n{json.dumps(summaries, indent=2)}\n\n"
         f"Select the best {target} indices for this duration. JSON only.")
-    
+
     result = call_llm(sys_p, usr_p)
     idxs = result.get("selected_indices", [])
-    
+
     if not idxs:
         log.warning("LLM returned empty — fallback to top-scored.")
         return candidates[:target]
-        
+
     sel = [candidates[i] for i in idxs if 0 <= i < len(candidates)]
-    
+
     # Padding safety rail if LLM picks too few
     min_required = (normal_days * MIN_PER_DAY)
     if len(sel) < min_required:
@@ -885,7 +902,7 @@ def allocate_to_days(selected: list[Place], days: list[DayPlan], sel_clusters: l
         n = day.capacity_max
         day.attractions = [p for p in selected if p.id not in used_ids][:n]
         used_ids.update({p.id for p in day.attractions})
-        
+
         # ── FIX: Top up empty departure days with high-scored backups ──
         if len(day.attractions) < n:
             for p in filtered_candidates:
@@ -1003,37 +1020,37 @@ def _meal_gap_location(day: DayPlan, cfg: TripConfig, timeline: list[dict], meal
 def _is_valid_restaurant(r: Optional[Place], used_restaurants: set) -> bool:
     if not r:
         return False
-        
+
     # 1. Ban non-restaurant place types
     banned_types = {
-        "lodging", "bar", "night_club", "movie_theater", 
-        "convenience_store", "supermarket", "grocery_or_supermarket", 
+        "lodging", "bar", "night_club", "movie_theater",
+        "convenience_store", "supermarket", "grocery_or_supermarket",
         "shopping_mall", "department_store", "gas_station", "gym", "hospital", "clinic"
     }
-    
+
     # 2. Ban names that indicate it's not a real sit-down restaurant
     banned_words = {
         # Lodging
-        "hotel", "resort", "hostel", "ryokan", "inn", "guest house", 
-        
+        "hotel", "resort", "hostel", "ryokan", "inn", "guest house",
+
         # Entertainment & General Services
         "cinema", "theater", "theatre", "stadium", "clinic", "hospital", "bank", "atm", "supermarket"
     }
-    
+
     name = r.name.lower()
-    
+
     # Check Types
     if any(t in r.types for t in banned_types):
         return False
-        
+
     # Check Words
     if any(w in name for w in banned_words):
         return False
-        
+
     # Check Exact Duplicates
     if name in used_restaurants:
         return False
-        
+
     # 3. Avoid repeating obvious chains (e.g., catching Ichiran twice)
     words = name.split()
     if words:
@@ -1043,7 +1060,7 @@ def _is_valid_restaurant(r: Optional[Place], used_restaurants: set) -> bool:
             for used in used_restaurants:
                 if used.startswith(brand):
                     return False # Brand already eaten this trip!
-                    
+
     return True
 
 
@@ -1130,7 +1147,7 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
 
     order.append(n - 1)
     return order
-    
+
 # ══════════════════════════════════════════════════════════════════════════════
 # STAGE 7 — ROUTE OPTIMIZATION WITH MEALS AS FIRST-CLASS NODES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1326,6 +1343,13 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                     dur = max(int((close_dt - arrival).total_seconds() / 60), 0)
 
         depart = arrival + timedelta(minutes=dur)
+        
+        if schedule and travel_s > 0:
+            schedule[-1]["transit_to_next"] = {
+                "mode": cfg.transport_mode.lower(),
+                "description": f"{cfg.transport_mode.capitalize()} --- {int(travel_s/60)} mins ---> {wp['name']}"
+            }
+
         schedule.append({
             "name": wp["name"], "kind": wp["kind"],
             "arrival": arrival, "depart": depart,
@@ -1339,13 +1363,18 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
 
     last_loc = day.sequence[-1]["location"]
     ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+    if schedule and ret_s > 0:
+        schedule[-1]["transit_to_next"] = {
+            "mode": cfg.transport_mode.lower(),
+            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> Return to Hotel"
+        }
     schedule.append({
         "name": "Return to Hotel", "kind": "hotel",
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
         "rating": None, "price_level": None, "opening_hours": []
     })
-    
+
     day.schedule = schedule
     return schedule
 
@@ -1517,26 +1546,26 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
 
         # 1. Check if an impossible meal is causing the failure
         meal_dropped = _drop_bad_meal(day, used_restaurants)
-        
+
         # ── MEALS > ATTRACTIONS ──
         # If a meal fell out of its window, the day is too packed!
         # We must sacrifice an attraction to save the meal schedule.
         if meal_dropped and len(day.attractions) > 1:
             # Un-ban ALL meals so they successfully respawn on the next rebuild
-            day.dropped_meals.clear() 
-            
+            day.dropped_meals.clear()
+
             # Sacrifice the worst attraction to free up time
             victim = _worst_offender_attraction(day)
             if victim:
                 day.attractions.remove(victim)
                 log.info("Repair: sacrificed attraction '%s' to make time for meals.", victim.name)
             acted = True
-            
+
         elif meal_dropped:
             # Fallback: If we are down to just 1 attraction and the meal STILL fails,
             # we have no choice but to let the meal drop to prevent an empty day.
             acted = True
-            
+
         elif len(day.attractions) > 1:
             # 2. No meals failed, but an attraction caused a failure (e.g., closed early).
             # Remove the worst offending attraction.
@@ -1562,19 +1591,19 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
 # ══════════════════════════════════════════════════════════════════════════════
 def expand_vibe_to_queries(destination: str, custom_vibe: str) -> list[str]:
     """
-    Feature 2: Takes a custom user vibe and asks the LLM to generate 
+    Feature 2: Takes a custom user vibe and asks the LLM to generate
     highly targeted Google Search queries for that niche interest.
     """
     if not custom_vibe:
         return []
-        
+
     sys_p = (
         "You are a local travel expert. Given a destination and a user's niche vibe/interest, "
         "generate 3 specific, highly-targeted search strings that can be used with the Google Places API "
         "to find matching locations. Return JSON only: {\"queries\": [\"string 1\", \"string 2\", ...]}"
     )
     usr_p = f"Destination: {destination}\nUser Vibe/Interest: {custom_vibe}\nGenerate search queries. JSON only."
-    
+
     res = call_llm(sys_p, usr_p)
     queries = res.get("queries", [])
     log.info(f"Semantic Preference Expansion generated queries for vibe '{custom_vibe}': {queries}")
@@ -1582,15 +1611,15 @@ def expand_vibe_to_queries(destination: str, custom_vibe: str) -> list[str]:
 
 
 def build_itinerary(cfg: TripConfig) -> dict:
-    _cache.clear() 
+    _cache.clear()
     log.info("═══ Itinerary: %s  %s → %s ═══", cfg.destination, cfg.start_date, cfg.end_date)
     days = classify_days(cfg)
     cfg.preferences = calculate_preference_scores(AVAILABLE_PREFERENCES, cfg.selected_preferences)
     max_candidates = compute_max_candidates(len(days), len(cfg.selected_preferences))
-    pool = build_discovery_pool(cfg, max_candidates)  
-    candidates = discover_candidates(cfg, pool) 
+    pool = build_discovery_pool(cfg, max_candidates)
+    candidates = discover_candidates(cfg, pool)
     if not candidates: return {"error": "No candidates discovered.", "days": []}
-    
+
     filtered = filter_candidates(candidates, cfg, max_candidates)
     backups  = filtered[MAX_PER_DAY * 2:]
     n_normal_days = sum(1 for d in days if d.day_type == "normal")
@@ -1615,7 +1644,7 @@ def build_itinerary(cfg: TripConfig) -> dict:
         if ok:
             log.info("  ✓ Day %d VALID", d.day_index)
             continue
-            
+
         log.warning("  ✗ Day %d: %s", d.day_index, viols)
         if deterministic_repair(d, cfg, backups, used_restaurants): # <-- PASS TRACKER
             log.info("  ✓ Day %d repaired (deterministic)", d.day_index)
@@ -1630,15 +1659,21 @@ def build_itinerary(cfg: TripConfig) -> dict:
             "valid": d.valid, #"violations": d.violations,
             "schedule": [
                 {
-                    "time": fmt_time(e["arrival"]), 
+                    "time": fmt_time(e["arrival"]),
                     "name": e["name"],
-                    "kind": e["kind"], 
+                    "kind": e["kind"],
                     "duration_min": e["duration_min"],
                     "travel_time_min": round(e.get("travel_sec", 0) / 60),
-                    "location": e["location"],
+                    "location": {
+                        "latitude": e["location"].get("latitude", 0.0),
+                        "longitude": e["location"].get("longitude", 0.0),
+                        "name": e["location"].get("name") or e.get("name", ""),
+                        "address": e.get("address") or e["location"].get("address") or ""
+                    },
                     "rating": e.get("rating"),
                     "price_level": e.get("price_level"),
-                    "opening_hours": e.get("opening_hours")
+                    "opening_hours": e.get("opening_hours"),
+                    "transit_to_next": e.get("transit_to_next")
                 }
                 for e in d.schedule],
             "attractions": [p.name for p in d.attractions],
