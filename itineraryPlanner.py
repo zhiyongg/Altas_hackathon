@@ -48,15 +48,22 @@ def _cache_key(*args):
         return x
     return tuple(norm(a) for a in args)
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
+_cache_lock = threading.Lock()
+
 def cached(fn):
     def wrapper(*args, **kwargs):
         key = (fn.__name__, _cache_key(*args), _cache_key(*sorted(kwargs.items())))
-        if key in _cache:
-            print(f"[CACHE HIT] {fn.__name__}")
-            return _cache[key]
+        with _cache_lock:
+            if key in _cache:
+                print(f"[CACHE HIT] {fn.__name__}")
+                return _cache[key]
         print(f"[API CALL]  {fn.__name__}")
         result = fn(*args, **kwargs)
-        _cache[key] = result
+        with _cache_lock:
+            _cache[key] = result
         return result
     return wrapper
 
@@ -629,48 +636,45 @@ def discover_candidates(cfg: TripConfig, pool: dict) -> list[Place]:
     places: list[Place] = []
     hlat, hlng = cfg.hotel["latitude"], cfg.hotel["longitude"]
     banned_primary_types = ["restaurant", "cafe", "bar", "lodging", "hotel"]
-
     discovery_target = pool["discovery_target"]
 
-    # 1. Standard preference theme searches
-    themes = sorted(cfg.preferences.keys(), key=lambda t: cfg.preferences[t], reverse=True)
-    for theme in themes[:pool["n_theme_searches"]]:
-        for raw in search_text(f"{theme} attractions in {cfg.destination}",
-                                max_results=pool["text_results_per_theme"]):
+    def add_results(raws):
+        for raw in raws:
             p = _raw_to_place(raw, "text", cfg.travel_style)
             if p and p.id not in seen and p.primary_type not in banned_primary_types:
                 seen.add(p.id)
                 places.append(p)
 
-    # ── FEATURE 2 INTEGRATION: Semantic Vibe Search Expansion ──
-    if cfg.custom_vibe:
-        vibe_queries = expand_vibe_to_queries(cfg.destination, cfg.custom_vibe)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        # 1. Theme searches + vibe searches, all fired at once
+        futures = []
+        themes = sorted(cfg.preferences.keys(), key=lambda t: cfg.preferences[t], reverse=True)
+        for theme in themes[:pool["n_theme_searches"]]:
+            futures.append(ex.submit(search_text, f"{theme} attractions in {cfg.destination}",
+                                      pool["text_results_per_theme"]))
+
+        vibe_queries = expand_vibe_to_queries(cfg.destination, cfg.custom_vibe) if cfg.custom_vibe else []
         for q in vibe_queries:
-            for raw in search_text(q, max_results=5):
-                p = _raw_to_place(raw, "text", cfg.travel_style)
-                if p and p.id not in seen and p.primary_type not in banned_primary_types:
-                    seen.add(p.id)
-                    places.append(p)
-    # ───────────────────────────────────────────────────────────
+            futures.append(ex.submit(search_text, q, 5))
 
-    # 2. Nearby search expansion passes
-    radius = DISCOVERY_RADIUS_M
-    max_passes = 3 if discovery_target > 80 else (2 if discovery_target > 40 else 1)
+        for fut in as_completed(futures):
+            add_results(fut.result())
 
-    for pass_i in range(max_passes):
-        if len(places) >= discovery_target:
-            break
-        for i in range(0, len(ATTRACTION_TYPES), 5):
-            chunk = ATTRACTION_TYPES[i:i + 5]
-            for raw in search_nearby(hlat, hlng, radius=radius, included_types=chunk,
-                                      max_results=pool["nearby_results_per_chunk"]):
-                p = _raw_to_place(raw, "nearby", cfg.travel_style)
-                if p and p.id not in seen and p.primary_type not in banned_primary_types:
-                    seen.add(p.id)
-                    places.append(p)
+        # 2. Nearby search passes — each pass's chunks run in parallel;
+        #    passes stay sequential since later passes only run if still short.
+        radius = DISCOVERY_RADIUS_M
+        max_passes = 3 if discovery_target > 80 else (2 if discovery_target > 40 else 1)
+        for pass_i in range(max_passes):
             if len(places) >= discovery_target:
                 break
-        radius = int(radius * 1.5)
+            chunk_futures = [
+                ex.submit(search_nearby, hlat, hlng, radius, ATTRACTION_TYPES[i:i + 5],
+                          pool["nearby_results_per_chunk"])
+                for i in range(0, len(ATTRACTION_TYPES), 5)
+            ]
+            for fut in as_completed(chunk_futures):
+                add_results(fut.result())
+            radius = int(radius * 1.5)
 
     log.info("Discovered %d unique candidates (target %d, %d pass(es)).",
               len(places), discovery_target, max_passes)
