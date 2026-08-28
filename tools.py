@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from schemas import HotelSearchInput
 
-
 load_dotenv()
 
 # ==========================================
@@ -328,6 +327,55 @@ def _stayapi_request(path: str, params: dict | None = None) -> dict:
         raise RuntimeError(f"StayAPI returned success=false on GET {path}: {body}")
     return body
 
+
+def search_hotels_raw(params: HotelSearchInput) -> dict:
+    """Call StayAPI's hotel search endpoint and return the raw JSON response
+    (or {"error": ...} on failure). Feeds extract_hotel_ui_cards()/get_hotel_ui_cards().
+
+    NOTE: query param names below follow the Booking.com-style StayAPI
+    convention used elsewhere in this codebase (lookup_destination,
+    docstrings referencing /v1/booking/search). Verify against StayAPI's
+    actual docs/Postman collection before relying on this in production —
+    param names for a given provider can vary.
+    """
+    query = {
+        "dest_id": params.dest_id,
+        "dest_type": params.dest_type,
+        "check_in": params.checkin,
+        "check_out": params.checkout,
+        "adults_number": params.adults,
+        "room_number": params.rooms,
+        "children_number": params.children,
+        "units": "metric",
+        "order_by": "popularity",
+        "filter_by_currency": params.currency,
+        "locale": "en-us",
+        "page_number": params.offset // params.rows_per_page if params.rows_per_page else 0,
+    }
+    if params.children and params.children_ages:
+        query["children_ages"] = ",".join(str(a) for a in params.children_ages)
+
+    return _stayapi_request("/v1/booking/search", params=query)
+
+
+def get_hotel_prices_raw(hotel_id: str, checkin: str, checkout: str, adults: int, rooms: int) -> dict:
+    """Call StayAPI's per-hotel room-prices endpoint and return the raw JSON
+    response (or {"error": ...} on failure). Feeds _parse_room_options().
+
+    NOTE: same caveat as search_hotels_raw — verify param names/path against
+    StayAPI's actual docs.
+    """
+    query = {
+        "hotel_id": hotel_id,
+        "check_in": checkin,
+        "check_out": checkout,
+        "adults_number": adults,
+        "room_number": rooms,
+        "units": "metric",
+        "locale": "en-us",
+    }
+    return _stayapi_request("/v1/booking/hotel/prices", params=query)
+
 # ==========================================
 # Hotel / Stay Tools
 # ==========================================
@@ -360,24 +408,8 @@ def search_hotels(params: HotelSearchInput) -> str:
         rooms: Number of rooms.
         children: Number of child guests.
     """
-    params = {
-        "dest_id": params.dest_id,
-        "dest_type": params.dest_type,
-        "checkin": params.checkin,
-        "checkout": params.checkout,
-        "adults": params.adults,
-        "rooms": params.rooms,
-        "children": params.children,
-        "children_ages": params.children_ages,
-        "rows_per_page": 25,
-        "offset": 0,
-        "currency": "USD",
-    }
-    try:
-        raw = _stayapi_request("/v1/booking/search", params=params)
-        return json.dumps(raw, indent=2, default=str)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    raw = search_hotels_raw(params)
+    return json.dumps(raw, indent=2, default=str)
 
 @tool
 def meta_search(hotel_name: str, location: str) -> str:
@@ -394,22 +426,9 @@ def meta_search(hotel_name: str, location: str) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-@tool
-def get_hotel_details(hotel_id: str) -> str:
-    """
-    Fetch rich Booking.com hotel details: address, coordinates, amenities,
-    star rating, and review score.
-    Args:
-        hotel_id: The Booking.com hotel ID.
-    """
-    try:
-        raw = _stayapi_request("/v2/booking/hotel/details", params={"hotel_id": hotel_id})
-        return json.dumps(raw, indent=2, default=str)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
 
 @tool
-def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int = 2, rooms: int = 1) -> str:
+def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, rooms: int) -> str:
     """
     Check live nightly rates per room type for a specific hotel across given dates.
     Use this after search_hotels or meta_search has narrowed down to a specific property.
@@ -420,15 +439,5 @@ def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int = 2
         adults: Number of adult guests.
         rooms: Number of rooms.
     """
-    params = {
-        "hotel_id": hotel_id,
-        "check_in": checkin,
-        "check_out": checkout,
-        "adults": adults,
-        "rooms": rooms,
-    }
-    try:
-        raw = _stayapi_request("/v1/booking/hotel/prices", params=params)
-        return json.dumps(raw, indent=2, default=str)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    raw = get_hotel_prices_raw(hotel_id, checkin, checkout, adults, rooms)
+    return json.dumps(raw, indent=2, default=str)

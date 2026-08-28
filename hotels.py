@@ -1,3 +1,34 @@
+import json
+
+from schemas import Hotel, StaySchedule, RoomOption, HotelSearchInput
+from tools import search_hotels_raw
+
+def _parse_review_and_image(item: dict) -> tuple[float | None, int | None, str | None]:
+    """Shared helper: pull guest rating, review count, and a photo URL out of a
+    StayAPI/Booking.com-shaped hotel dict, trying the field names StayAPI is
+    known to use plus a few common aliases."""
+    rating_raw = item.get("review_score") or item.get("rating") or item.get("reviewScore")
+    try:
+        rating = round(float(rating_raw), 1) if rating_raw is not None else None
+    except (ValueError, TypeError):
+        rating = None
+
+    count_raw = item.get("review_nr") or item.get("review_count") or item.get("reviewsCount")
+    try:
+        review_count = int(count_raw) if count_raw is not None else None
+    except (ValueError, TypeError):
+        review_count = None
+
+    image_url = (
+        item.get("image_url")
+        or item.get("main_photo_url")
+        or item.get("max_photo_url")
+        or item.get("image")
+        or item.get("photo_url")
+    )
+
+    return rating, review_count, image_url
+
 
 def search_mock_hotels(
     input: HotelSearchInput,
@@ -109,14 +140,22 @@ def search_mock_hotels(
         except (ValueError, TypeError):
             star_rating = None
 
+        rating, review_count, image_url = _parse_review_and_image(item)
+
         hotels.append(Hotel(
             hotel_id=hotel_id,
             name=str(item.get("hotel_name") or item.get("name") or ""),
             address=item.get("address") or item.get("hotel_address"),
             city=item.get("city") or item.get("city_name"),
-            latitude=coords.get("latitude") or coords.get("lat"),
-            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng"),
+            latitude=coords.get("latitude") or coords.get("lat") or item.get("latitude"),
+            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng") or item.get("longitude"),
             star_rating=star_rating,
+            rating=rating,
+            review_count=review_count,
+            image_url=image_url,
+            is_sponsored=True,  # everything in search_mock_hotels comes from the sponsored/featured list
+            dest_id=str(input.dest_id),
+            dest_type=input.dest_type,
             stay_schedule=StaySchedule(
                 check_in_date=checkin,
                 check_out_date=checkout,
@@ -179,18 +218,16 @@ def backfill_hotel_rooms(
         selected = sorted_rooms[0]
         available = sorted_rooms[1:]
 
-        updated.append(Hotel(
-            hotel_id=hotel.hotel_id,
-            name=hotel.name,
-            address=hotel.address,
-            city=hotel.city,
-            latitude=hotel.latitude,
-            longitude=hotel.longitude,
-            star_rating=hotel.star_rating,
-            stay_schedule=hotel.stay_schedule,
-            selected_room=selected,
-            available_rooms=available,
-        ))
+        # BUG FIX: this used to rebuild `Hotel(...)` from scratch and only
+        # copied 7 of the ~13 fields, silently dropping rating, review_count,
+        # image_url, is_sponsored (resets to False -> breaks Featured/All
+        # Options split), dest_id and dest_type (breaks "Change
+        # Accommodation" re-search). model_copy(update=...) keeps every
+        # other field as-is and only touches the two we're actually changing.
+        updated.append(hotel.model_copy(update={
+            "selected_room": selected,
+            "available_rooms": available,
+        }))
 
     return updated
 
@@ -312,9 +349,20 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
 
-def extract_hotel_ui_cards(res_data: dict, checkin: str, checkout: str) -> list[dict]:
+def extract_hotel_ui_cards(
+    res_data: dict, checkin: str, checkout: str, dest_id: str | None = None, dest_type: str | None = None
+) -> list[Hotel]:
     """Parse hotel search results into Hotel objects with StaySchedule populated.
-    The agent will fill selected_room and available_rooms later via get_hotel_prices."""
+
+    Returns Pydantic Hotel objects, NOT dicts/cards — selected_room is a zeroed
+    placeholder here. Call get_hotel_ui_cards() instead if you want plain
+    dict cards ready to serialize to the frontend; use backfill_hotel_rooms()
+    first if you also want real per-room pricing filled in from get_hotel_prices.
+    dest_id/dest_type are the destination this search was run against - StayAPI's
+    per-hotel search results don't carry it, so it's passed in from the caller
+    and stamped onto every Hotel so the frontend can re-search this destination
+    later (e.g. for Change Accommodation).
+    """
     from datetime import datetime as _dt
     try:
         total_nights = (_dt.strptime(checkout, "%Y-%m-%d") - _dt.strptime(checkin, "%Y-%m-%d")).days
@@ -323,7 +371,18 @@ def extract_hotel_ui_cards(res_data: dict, checkin: str, checkout: str) -> list[
     if total_nights < 1:
         total_nights = 1
 
+    # BUG FIX: StayAPI actually returns {"data": {"hotels": [...]}} — the old
+    # chain here (`res_data.get("data")`) grabbed the *dict* wrapper, not the
+    # list inside it, so `isinstance(results_list, list)` failed and this
+    # silently returned [] every time, even on a successful search with real
+    # results (confirmed via raw StayAPI response logging). Drill into common
+    # nested keys the same way _parse_room_options already does for prices.
     results_list = res_data.get("results") or res_data.get("data") or res_data.get("hotels") or []
+    if isinstance(results_list, dict):
+        for key in ("hotels", "results", "hotel_list", "properties", "items"):
+            if key in results_list:
+                results_list = results_list[key]
+                break
     if not isinstance(results_list, list):
         return []
 
@@ -346,14 +405,26 @@ def extract_hotel_ui_cards(res_data: dict, checkin: str, checkout: str) -> list[
         except (ValueError, TypeError):
             star_rating = None
 
+        rating, review_count, image_url = _parse_review_and_image(item)
+
         hotels.append(Hotel(
             hotel_id=hotel_id,
             name=str(item.get("hotel_name") or item.get("name") or ""),
             address=item.get("address") or item.get("hotel_address"),
             city=item.get("city") or item.get("city_name"),
-            latitude=coords.get("latitude") or coords.get("lat"),
-            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng"),
+            # BUG FIX: this StayAPI response puts latitude/longitude at the
+            # top level of each hotel dict, not nested under coordinates/
+            # location/geo — fall back to the top-level keys so pins aren't
+            # silently None.
+            latitude=coords.get("latitude") or coords.get("lat") or item.get("latitude"),
+            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng") or item.get("longitude"),
             star_rating=star_rating,
+            rating=rating,
+            review_count=review_count,
+            image_url=image_url,
+            is_sponsored=False,  # real StayAPI results, not the featured/mock list
+            dest_id=dest_id,
+            dest_type=dest_type,
             stay_schedule=StaySchedule(
                 check_in_date=checkin,
                 check_out_date=checkout,
@@ -365,47 +436,22 @@ def extract_hotel_ui_cards(res_data: dict, checkin: str, checkout: str) -> list[
                 price_per_night=0.0,
                 total_price=0.0,
             ),
-            available_rooms=[
-                RoomOption(
-                    room_name="",
-                    max_occupancy=0,
-                    price_per_night=0.0,
-                    total_price=0.0,
-                ),
-            ],
+            available_rooms=[],
         ))
 
     return hotels
 
-def search_hotels(params: HotelSearchInput) -> str:
+
+def get_hotel_ui_cards(params: HotelSearchInput) -> list[dict]:
+    """Search StayAPI for real hotels and shape them into UI-ready card dicts.
+
+    This is the function REST endpoints (e.g. api.py's /hotel/change) should
+    call — it wraps search_hotels_raw() + extract_hotel_ui_cards() so callers
+    get a plain list[dict] matching the Hotel schema, not raw StayAPI JSON
+    and not a list of Pydantic Hotel objects.
     """
-    Search Booking.com hotels in a destination for the given dates.
-    Returns a list of hotels with hotel_id, name, rating, price, address, and cancellation flags.
-    Use lookup_destination first to obtain dest_id and dest_type.
-    Args:
-        dest_id: Destination ID obtained from lookup_destination.
-        dest_type: Destination type (e.g. CITY, DISTRICT) from lookup_destination.
-        checkin: Check-in date in YYYY-MM-DD format.
-        checkout: Check-out date in YYYY-MM-DD format.
-        adults: Number of adult guests.
-        rooms: Number of rooms.
-        children: Number of child guests.
-    """
-    params = {
-        "dest_id": params.dest_id,
-        "dest_type": params.dest_type,
-        "checkin": params.checkin,
-        "checkout": params.checkout,
-        "adults": params.adults,
-        "rooms": params.rooms,
-        "children": params.children,
-        "children_ages": params.children_ages,
-        "rows_per_page": 25,
-        "offset": 0,
-        "currency": "USD",
-    }
-    try:
-        raw = _stayapi_request("/v1/booking/search", params=params)
-        return json.dumps(raw, indent=2, default=str)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    raw = search_hotels_raw(params)
+    if "error" in raw:
+        return []
+    hotels = extract_hotel_ui_cards(raw, params.checkin, params.checkout, str(params.dest_id), params.dest_type)
+    return [h.model_dump() for h in hotels]

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # Allowed values shared by itineraryPlanner.py (TRAVEL_STYLE_CAPACITY / _SPEED /
@@ -187,6 +187,12 @@ class Hotel(BaseModel):
     latitude: Optional[float] = Field(default=None, description="Geographical latitude coordinate")
     longitude: Optional[float] = Field(default=None, description="Geographical longitude coordinate")
     star_rating: Optional[int] = Field(default=None, description="Hotel star rating (1-5)")
+    rating: Optional[float] = Field(default=None, description="Guest review score, e.g. 8.7")
+    review_count: Optional[int] = Field(default=None, description="Number of guest reviews")
+    image_url: Optional[str] = Field(default=None, description="Main hotel photo URL")
+    is_sponsored: bool = Field(default=False, description="True if this came from the sponsored/featured list")
+    dest_id: Optional[str] = Field(default=None, description="StayAPI destination ID this hotel was searched under - needed so the frontend can re-search this destination later (e.g. Change Accommodation)")
+    dest_type: Optional[str] = Field(default=None, description="StayAPI destination type (e.g. CITY, DISTRICT) matching dest_id")
     stay_schedule: StaySchedule = Field(description="Check-in/out dates, times, and duration")
     selected_room: RoomOption = Field(description="Selected room type with price and occupancy capacity")
     available_rooms: List[RoomOption] = Field(default=[], description="Other available room options")
@@ -207,6 +213,7 @@ class ItineraryPlan(BaseModel):
     daily_itinerary: PlannerItinerary = Field(description="Day-by-day plan, containing destination, dates, and the 'days' array matching the planner output.")
     cost_breakdown: CostBreakdown
     travel_tips: List[str]
+
 class HotelSearchInput(BaseModel):
     dest_id: str = Field(..., description="From lookup_destination")
 
@@ -229,3 +236,19 @@ class HotelSearchInput(BaseModel):
     rows_per_page: int = Field(25, ge=1, le=100)
     offset: int = Field(0, ge=0)
     currency: str = Field("USD")
+
+
+class HotelChangeRequest(BaseModel):
+    dest_id: str
+    dest_type: str = "CITY"
+    checkin: str
+    checkout: str
+    adults: int
+    rooms: int
+    children: int
+    children_ages: list[int] | None = None
+    # How many of the top (cheapest-first, after sort) searched hotels to
+    # backfill with real per-room pricing via get_hotel_prices. Each one is
+    # an extra StayAPI call, so keep this small.
+    price_lookup_limit: int = 5
+

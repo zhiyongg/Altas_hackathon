@@ -8,9 +8,11 @@ import logging
 from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
 from tools import get_hotel_prices_raw
 
-from schemas import HotelSearchInput, HotelChangeRequest
+from schemas import HotelSearchInput
 
-# TODO:make a mock hotel list, but i think since now uses mongodb?
+# TODO: replace with real sponsored/featured hotel data (or a partner feed).
+# search_mock_hotels() needs each dict to carry hotel_id, hotel_name, address,
+# city, coordinates, and a dest_id matching the StayAPI dest_id being searched.
 SPONSORED_MOCK_HOTELS: list[dict] = []
 
 # Configure root logger
@@ -64,6 +66,20 @@ async def generate_trip(req: TripRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class HotelChangeRequest(BaseModel):
+    dest_id: str
+    dest_type: str = "CITY"
+    checkin: str
+    checkout: str
+    adults: int = 2
+    rooms: int = 1
+    children: int = 0
+    children_ages: list[int] | None = None
+    # How many of the top (cheapest-first, after sort) searched hotels to
+    # backfill with real per-room pricing via get_hotel_prices. Each one is
+    # an extra StayAPI call, so keep this small.
+    price_lookup_limit: int = 5
+
 
 @app.post("/hotel/change")
 async def change_hotel(req: HotelChangeRequest):
@@ -101,10 +117,10 @@ async def change_hotel(req: HotelChangeRequest):
             card["selected_room"] = sorted_rooms[0].model_dump()
             card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
 
-        return {
-            "sponsored": [h.model_dump() for h in sponsored],
-            "hotels": searched_cards,
-        }
+        # Single flat list — each hotel already carries is_sponsored, so the
+        # frontend splits "Featured" vs "All Options" the same way it did
+        # against the old local stayOptionsList mock.
+        return {"hotels": [h.model_dump() for h in sponsored] + searched_cards}
 
     except Exception as e:
         logger.error(f"Error searching hotels: {e}")
