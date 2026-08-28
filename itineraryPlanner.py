@@ -199,7 +199,7 @@ def haversine_km(a: dict, b: dict) -> float:
 def _places_headers():
     fields = [
         "places.id", "places.displayName", "places.location",
-        # "places.formattedAddress",
+        "places.formattedAddress",
         "places.rating",
         "places.regularOpeningHours.weekdayDescriptions",
         "places.priceLevel", "places.primaryType", "places.types",
@@ -210,6 +210,18 @@ def _places_headers():
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask": ",".join(fields),
     }
+
+def _safe_post(url: str, headers: dict, json_payload: dict, max_retries: int = 3):
+    import time
+    for attempt in range(max_retries):
+        try:
+            return requests.post(url, headers=headers, json=json_payload, timeout=15)
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                log.error("API call failed after %d retries: %s", max_retries, e)
+                return None
+            time.sleep(1 + attempt)
+    return None
 
 @cached
 def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
@@ -222,9 +234,9 @@ def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
         },
     }
     if included_types: payload["includedTypes"] = included_types
-    resp = requests.post(url, headers=_places_headers(), json=payload)
-    if resp.status_code != 200:
-        log.warning("Nearby Search %s: %s", resp.status_code, resp.text)
+    resp = _safe_post(url, headers=_places_headers(), json_payload=payload)
+    if not resp or resp.status_code != 200:
+        log.warning("Nearby Search %s: %s", resp.status_code if resp else "Failed", resp.text if resp else "No Response")
         return []
     return resp.json().get("places", [])
 
@@ -232,9 +244,9 @@ def search_nearby(lat: float, lng: float, radius: float = DISCOVERY_RADIUS_M,
 def search_text(query: str, max_results: int = 10) -> list[dict]:
     url = "https://places.googleapis.com/v1/places:searchText"
     payload = {"textQuery": query, "pageSize": max_results}
-    resp = requests.post(url, headers=_places_headers(), json=payload)
-    if resp.status_code != 200:
-        log.warning("Text Search %s: %s", resp.status_code, resp.text)
+    resp = _safe_post(url, headers=_places_headers(), json_payload=payload)
+    if not resp or resp.status_code != 200:
+        log.warning("Text Search %s: %s", resp.status_code if resp else "Failed", resp.text if resp else "No Response")
         return []
     return resp.json().get("places", [])
 
@@ -308,9 +320,9 @@ def compute_route_matrix(origins: list[dict], destinations: list[dict],
         elif travel_mode == "DRIVE":
             payload["routingPreference"] = routing_pref
 
-        resp = requests.post(url, headers=headers, json=payload)
-        if resp.status_code != 200:
-            log.warning("Route Matrix 400: %s", resp.text)
+        resp = _safe_post(url, headers=headers, json_payload=payload)
+        if not resp or resp.status_code != 200:
+            log.warning("Route Matrix 400: %s", resp.text if resp else "Failed")
             continue
 
         data = resp.json()
@@ -598,7 +610,12 @@ def _raw_to_place(raw: dict, source="api", travel_style: str = "moderate") -> Pl
 
     return Place(
         id=raw.get("id", ""), name=raw.get("displayName", {}).get("text", "Unknown"),
-        location={"latitude": loc["latitude"], "longitude": loc["longitude"]},
+        location={
+            "latitude": loc["latitude"],
+            "longitude": loc["longitude"],
+            "name": raw.get("displayName", {}).get("text", "Unknown"),
+            "address": raw.get("formattedAddress", "")
+        },
         types=types_list, primary_type=primary,
         rating=raw.get("rating", 0.0), user_rating_count=raw.get("userRatingCount", 0),
         price_level=raw.get("priceLevel", ""),
@@ -1326,6 +1343,13 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                     dur = max(int((close_dt - arrival).total_seconds() / 60), 0)
 
         depart = arrival + timedelta(minutes=dur)
+        
+        if schedule and travel_s > 0:
+            schedule[-1]["transit_to_next"] = {
+                "mode": cfg.transport_mode.lower(),
+                "description": f"{cfg.transport_mode.capitalize()} --- {int(travel_s/60)} mins ---> {wp['name']}"
+            }
+
         schedule.append({
             "name": wp["name"], "kind": wp["kind"],
             "arrival": arrival, "depart": depart,
@@ -1339,6 +1363,11 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
 
     last_loc = day.sequence[-1]["location"]
     ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+    if schedule and ret_s > 0:
+        schedule[-1]["transit_to_next"] = {
+            "mode": cfg.transport_mode.lower(),
+            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> Return to Hotel"
+        }
     schedule.append({
         "name": "Return to Hotel", "kind": "hotel",
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
@@ -1635,10 +1664,16 @@ def build_itinerary(cfg: TripConfig) -> dict:
                     "kind": e["kind"],
                     "duration_min": e["duration_min"],
                     "travel_time_min": round(e.get("travel_sec", 0) / 60),
-                    "location": e["location"],
+                    "location": {
+                        "latitude": e["location"].get("latitude", 0.0),
+                        "longitude": e["location"].get("longitude", 0.0),
+                        "name": e["location"].get("name") or e.get("name", ""),
+                        "address": e.get("address") or e["location"].get("address") or ""
+                    },
                     "rating": e.get("rating"),
                     "price_level": e.get("price_level"),
-                    "opening_hours": e.get("opening_hours")
+                    "opening_hours": e.get("opening_hours"),
+                    "transit_to_next": e.get("transit_to_next")
                 }
                 for e in d.schedule],
             "attractions": [p.name for p in d.attractions],

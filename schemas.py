@@ -122,6 +122,7 @@ class Location(BaseModel):
     latitude: float = Field(description="Geographical latitude coordinate")
     longitude: float = Field(description="Geographical longitude coordinate")
     name: Optional[str] = Field(default=None, description="Place label, present on hotel stops")
+    address: Optional[str] = Field(default=None, description="Physical address of the location")
 
 class ScheduleEntry(BaseModel):
     time: str = Field(description="Arrival time HH:MM")
@@ -132,6 +133,7 @@ class ScheduleEntry(BaseModel):
     rating: Optional[float] = Field(default=None, description="Google rating, null for hotel stops")
     price_level: Optional[str] = Field(default=None, description="Google price level enum (e.g., PRICE_LEVEL_MODERATE)")
     opening_hours: List[str] = Field(default=[], description="Weekday opening-hour descriptions")
+    transit_to_next: Optional[dict] = Field(default=None, description="Transportation to next activity")
 
 class DayMeals(BaseModel):
     breakfast: Optional[str] = Field(default=None, description="Breakfast venue name")
