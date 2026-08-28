@@ -63,17 +63,24 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
     
     # Run the agent
     result = agent.invoke({"messages": [HumanMessage(content=prompt)]})
-    final_output = result["messages"][-1].content
     
-    # Enforce the Pydantic schema using with_structured_output to parse the agent's final answer
+    # 1. Find the raw tool output from plan_itinerary in the message stream
+    raw_planner_json = None
+    for msg in reversed(result["messages"]):
+        if hasattr(msg, "name") and msg.name == "plan_itinerary":
+            raw_planner_json = json.loads(msg.content)
+            break
+
+    # 2. Extract structured summary for overview, flights, hotels, and costs
     structured_llm = llm.with_structured_output(ItineraryPlan)
-    try:
-        structured_result = structured_llm.invoke(f"Extract the itinerary from this text into the schema:\n{final_output}")
-        return structured_result.model_dump_json(indent=2)
-    except Exception as e:
-        # Fallback
-        print(f"Failed to parse into Pydantic schema: {e}")
-        return final_output
+    final_output = result["messages"][-1].content
+    structured_result = structured_llm.invoke(f"Extract overview, flights, hotels, cost breakdown, and tips from:\n{final_output}")
+
+    # 3. Direct Inject: Preserve the deterministic itinerary without LLM loss
+    if raw_planner_json and "days" in raw_planner_json:
+        structured_result.daily_itinerary = raw_planner_json
+
+    return structured_result.model_dump_json(indent=2)
 
 if __name__ == "__main__":
     print("Initializing Agent...")

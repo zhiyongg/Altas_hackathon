@@ -1065,20 +1065,39 @@ def _is_valid_restaurant(r: Optional[Place], used_restaurants: set) -> bool:
 
 
 def find_meal_restaurant(meal_name: str, location: dict, cfg: TripConfig,
-                         used_restaurants: set) -> Optional[Place]:
+                         used_restaurants: set, date_str: str = "") -> Optional[Place]:
     if meal_name == "breakfast":
         meal_types = ["cafe", "bakery"]
     elif meal_name == "lunch":
         meal_types = ["restaurant", "cafe"]
     else:
         meal_types = ["restaurant", "steak_house"]
+        
     raw = search_nearby(location["latitude"], location["longitude"], radius=1500,
                         included_types=meal_types, max_results=10)
-    rests = [r for r in (_raw_to_place(x, "meal", cfg.travel_style) for x in raw)
-             if _is_valid_restaurant(r, used_restaurants)]
-    if not rests:
+    
+    valid_candidates = []
+    for x in raw:
+        r = _raw_to_place(x, "meal", cfg.travel_style)
+        if not _is_valid_restaurant(r, used_restaurants):
+            continue
+            
+        # ── PREVENT BREAKFAST DELAY BUG ──
+        if meal_name == "breakfast" and date_str:
+            win = get_opening_window(r, date_str)
+            if win == "CLOSED":
+                continue
+            if win:
+                # If cafe opens at 10:00 AM or later, reject it for breakfast
+                open_hour = int(win[0].split(":")[0])
+                if open_hour >= 10:
+                    continue
+                    
+        valid_candidates.append(r)
+
+    if not valid_candidates:
         return None
-    return max(rests, key=lambda r: (r.rating or 0, r.user_rating_count or 0))
+    return max(valid_candidates, key=lambda r: (r.rating or 0, r.user_rating_count or 0))
 
 
 def _entry_window(day: DayPlan, wp: dict):
@@ -1195,7 +1214,7 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
         if meal_name in day.dropped_meals:
             continue  # repair stage removed this meal -> do not re-insert
         loc = _meal_gap_location(day, cfg, timeline, meal_name)
-        restaurant = find_meal_restaurant(meal_name, loc, cfg, used_restaurants)
+        restaurant = find_meal_restaurant(meal_name, loc, cfg, used_restaurants, date_str=day.date)
         if restaurant is None:
             continue
         day.meals[meal_name] = restaurant
@@ -1553,14 +1572,6 @@ def _worst_offender_attraction(day: DayPlan) -> Optional[Place]:
 
 
 def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], used_restaurants: set) -> bool:
-    """Deterministic repair: target the WORST offending activity.
-
-    Order of attempts each iteration:
-      1. Check if a meal is out of bounds. If so, clear the meal ban and drop an attraction instead.
-      2. Otherwise remove the worst offending attraction.
-    After every change the whole route is re-optimized and all travel times are
-    recalculated via build_day_sequence (which also re-schedules the day).
-    """
     if validate_day(day)[0]:
         return True
 
@@ -1568,17 +1579,12 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
     for _ in range(max_attempts):
         acted = False
 
-        # 1. Check if an impossible meal is causing the failure
         meal_dropped = _drop_bad_meal(day, used_restaurants)
 
-        # ── MEALS > ATTRACTIONS ──
-        # If a meal fell out of its window, the day is too packed!
-        # We must sacrifice an attraction to save the meal schedule.
         if meal_dropped and len(day.attractions) > 1:
-            # Un-ban ALL meals so they successfully respawn on the next rebuild
+            # Allow meals to be reconsidered, but DO NOT un-ban the offending restaurant
             day.dropped_meals.clear()
 
-            # Sacrifice the worst attraction to free up time
             victim = _worst_offender_attraction(day)
             if victim:
                 day.attractions.remove(victim)
@@ -1586,13 +1592,9 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
             acted = True
 
         elif meal_dropped:
-            # Fallback: If we are down to just 1 attraction and the meal STILL fails,
-            # we have no choice but to let the meal drop to prevent an empty day.
             acted = True
 
         elif len(day.attractions) > 1:
-            # 2. No meals failed, but an attraction caused a failure (e.g., closed early).
-            # Remove the worst offending attraction.
             victim = _worst_offender_attraction(day)
             if victim is not None:
                 day.attractions.remove(victim)
@@ -1602,8 +1604,6 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
         if not acted:
             break
 
-        # Re-optimize the route, re-place remaining meals and recalc all travel
-        # times + the schedule for the reduced day.
         build_day_sequence(day, cfg, used_restaurants)
         if validate_day(day)[0]:
             return True

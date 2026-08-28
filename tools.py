@@ -267,7 +267,17 @@ def plan_itinerary(
     hotel_name: str, 
     hotel_lat: float, 
     hotel_lng: float, 
-    preferences: list[str]
+    preferences: list[str],
+    airport_name: str = "",
+    airport_lat: float = 0.0,
+    airport_lng: float = 0.0,
+    travel_style: str = "moderate",
+    transport_mode: str = "TRANSIT",
+    group_size: int = 2,
+    budget: str = "medium",
+    check_in_time: str = "14:00",
+    check_out_time: str = "11:00",
+    custom_vibe: str = ""
 ) -> str:
     """
     Plan the daily itinerary of attractions and meals. 
@@ -282,6 +292,16 @@ def plan_itinerary(
         hotel_lat: Latitude of the hotel
         hotel_lng: Longitude of the hotel
         preferences: List of strings for travel preferences (e.g. ['culture', 'food', 'scenery'])
+        airport_name: Name of the arrival/departure airport
+        airport_lat: Latitude of the airport
+        airport_lng: Longitude of the airport
+        travel_style: Travel pacing style ('relaxed', 'moderate', or 'packed')
+        transport_mode: Primary mode of transportation ('TRANSIT', 'DRIVE', or 'WALK')
+        group_size: Number of travelers
+        budget: Overall trip budget level ('low', 'medium', or 'high')
+        check_in_time: Hotel check-in time (HH:MM)
+        check_out_time: Hotel check-out time (HH:MM)
+        custom_vibe: Specific semantic vibe (e.g. 'Cyberpunk', 'Romantic')
     """
     from itineraryPlanner import build_itinerary, TripConfig
     
@@ -292,15 +312,15 @@ def plan_itinerary(
         arrival_datetime=arrival_datetime,
         departure_datetime=departure_datetime,
         hotel={"name": hotel_name, "latitude": hotel_lat, "longitude": hotel_lng},
-        airport={},
+        airport={"name": airport_name, "latitude": airport_lat, "longitude": airport_lng} if airport_lat and airport_lng else {},
         selected_preferences=preferences,
-        travel_style="moderate",
-        transport_mode="TRANSIT",
-        group_size=2,
-        budget="medium",
-        check_in_time="14:00",
-        check_out_time="11:00",
-        custom_vibe=""
+        travel_style=travel_style,
+        transport_mode=transport_mode,
+        group_size=group_size,
+        budget=budget,
+        check_in_time=check_in_time,
+        check_out_time=check_out_time,
+        custom_vibe=custom_vibe
     )
     
     result = build_itinerary(cfg)
