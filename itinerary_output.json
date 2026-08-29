@@ -1,425 +1,284 @@
 {
-  "destination": "Tokyo, Japan",
-  "start": "2026-09-01",
-  "end": "2026-09-03",
-  "days": [
+  "trip_overview": {
+    "title": "Kuala Lumpur City Escape",
+    "origin_city": "SIN",
+    "destination_city": "Kuala Lumpur",
+    "start_date": "2026-09-16",
+    "end_date": "2026-09-17",
+    "total_days": 2,
+    "summary": "A short 2-day trip to Kuala Lumpur featuring iconic sights like the Petronas Twin Towers and local dining experiences.",
+    "total_estimated_budget": {
+      "amount": 2000.0,
+      "currency": "USD"
+    }
+  },
+  "flights": [
     {
-      "day": 0,
-      "date": "2026-09-01",
-      "type": "arrival",
-      "valid": true,
-      "schedule": [
-        {
-          "time": "17:30",
-          "name": "Dinner: ICHIRAN Shinjuku Station Central East Exit",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 1,
-          "location": {
-            "latitude": 35.690585899999995,
-            "longitude": 139.7028052,
-            "name": "ICHIRAN Shinjuku Station Central East Exit",
-            "address": "Japan, 〒160-0022 Tokyo, Shinjuku City, Shinjuku, 3-chōme−34−１１ Peace Bldg., B1F"
-          },
-          "rating": 4.3,
-          "price_level": "PRICE_LEVEL_MODERATE",
-          "opening_hours": [
-            "Monday: Open 24 hours",
-            "Tuesday: Open 24 hours",
-            "Wednesday: Open 24 hours",
-            "Thursday: Open 24 hours",
-            "Friday: Open 24 hours",
-            "Saturday: Open 24 hours",
-            "Sunday: Open 24 hours"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 1 mins ---> Shinjuku Golden-Gai"
-          }
-        },
-        {
-          "time": "18:31",
-          "name": "Shinjuku Golden-Gai",
-          "kind": "attraction",
-          "duration_min": 60,
-          "travel_time_min": 1,
-          "location": {
-            "latitude": 35.6941118,
-            "longitude": 139.70476109999998,
-            "name": "Shinjuku Golden-Gai",
-            "address": "Japan, 〒160-0021 Tokyo, Shinjuku City, Kabukichō, 1-chōme−1−６ あかるい花園 五番街"
-          },
-          "rating": 4.3,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: Open 24 hours",
-            "Tuesday: Open 24 hours",
-            "Wednesday: Open 24 hours",
-            "Thursday: Open 24 hours",
-            "Friday: Open 24 hours",
-            "Saturday: Open 24 hours",
-            "Sunday: Open 24 hours"
-          ],
-          "transit_to_next": null
-        },
-        {
-          "time": "19:31",
-          "name": "Check-in & Rest (Hotel Gracery Shinjuku)",
-          "kind": "hotel",
-          "duration_min": 0,
-          "travel_time_min": 0,
-          "location": {
-            "latitude": 35.6938,
-            "longitude": 139.7036,
-            "name": "Hotel Gracery Shinjuku",
-            "address": ""
-          },
-          "rating": null,
-          "price_level": null,
-          "opening_hours": [],
-          "transit_to_next": null
-        }
-      ],
-      "attractions": [
-        "Shinjuku Golden-Gai"
-      ],
-      "meals": {
-        "dinner": "ICHIRAN Shinjuku Station Central East Exit"
-      }
-    },
-    {
-      "day": 1,
-      "date": "2026-09-02",
-      "type": "normal",
-      "valid": true,
-      "schedule": [
-        {
-          "time": "09:00",
-          "name": "Breakfast: Cafe Aaliya",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 1,
-          "location": {
-            "latitude": 35.690497,
-            "longitude": 139.7047727,
-            "name": "Cafe Aaliya",
-            "address": "Japan, 〒160-0022 Tokyo, Shinjuku City, Shinjuku, 3-chōme−1−１７ ビル山本 B1F"
-          },
-          "rating": 4.3,
-          "price_level": "PRICE_LEVEL_MODERATE",
-          "opening_hours": [
-            "Monday: 9:00 AM – 8:00 PM",
-            "Tuesday: 9:00 AM – 8:00 PM",
-            "Wednesday: 9:00 AM – 8:00 PM",
-            "Thursday: 9:00 AM – 8:00 PM",
-            "Friday: 9:00 AM – 8:00 PM",
-            "Saturday: 9:00 AM – 8:30 PM",
-            "Sunday: 9:00 AM – 8:30 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 2 mins ---> Shinjuku Gyoen National Garden"
-          }
-        },
-        {
-          "time": "10:02",
-          "name": "Shinjuku Gyoen National Garden",
-          "kind": "attraction",
-          "duration_min": 120,
-          "travel_time_min": 2,
-          "location": {
-            "latitude": 35.685176299999995,
-            "longitude": 139.7100517,
-            "name": "Shinjuku Gyoen National Garden",
-            "address": "11 Naitōmachi, Shinjuku City, Tokyo 160-0014, Japan"
-          },
-          "rating": 4.6,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: Closed",
-            "Tuesday: 9:00 AM – 6:00 PM",
-            "Wednesday: 9:00 AM – 6:00 PM",
-            "Thursday: 9:00 AM – 6:00 PM",
-            "Friday: 9:00 AM – 6:00 PM",
-            "Saturday: 9:00 AM – 6:00 PM",
-            "Sunday: 9:00 AM – 6:00 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 4 mins ---> Meiji Jingu"
-          }
-        },
-        {
-          "time": "12:06",
-          "name": "Meiji Jingu",
-          "kind": "attraction",
-          "duration_min": 60,
-          "travel_time_min": 4,
-          "location": {
-            "latitude": 35.6763976,
-            "longitude": 139.6993259,
-            "name": "Meiji Jingu",
-            "address": "1-1 Yoyogikamizonochō, Shibuya, Tokyo 151-8557, Japan"
-          },
-          "rating": 4.6,
-          "price_level": "",
-          "opening_hours": [],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 5 mins ---> Shibuya Sky"
-          }
-        },
-        {
-          "time": "13:12",
-          "name": "Shibuya Sky",
-          "kind": "attraction",
-          "duration_min": 60,
-          "travel_time_min": 6,
-          "location": {
-            "latitude": 35.6586719,
-            "longitude": 139.7019848,
-            "name": "Shibuya Sky",
-            "address": "Japan, 〒150-6145 Tokyo, Shibuya, 2-chōme−24−１２ スクランブルスクエア 14階・45階 46階・屋上"
-          },
-          "rating": 4.6,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: 10:00 AM – 10:30 PM",
-            "Tuesday: 10:00 AM – 10:30 PM",
-            "Wednesday: 10:00 AM – 10:30 PM",
-            "Thursday: 10:00 AM – 10:30 PM",
-            "Friday: 10:00 AM – 10:30 PM",
-            "Saturday: 10:00 AM – 10:30 PM",
-            "Sunday: 10:00 AM – 10:30 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 10 mins ---> Lunch: Tokyo American Club"
-          }
-        },
-        {
-          "time": "14:23",
-          "name": "Lunch: Tokyo American Club",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 11,
-          "location": {
-            "latitude": 35.6586213,
-            "longitude": 139.7414636,
-            "name": "Tokyo American Club",
-            "address": "2-chōme-1-2 Azabudai, Minato City, Tokyo 106-8649, Japan"
-          },
-          "rating": 4.4,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: 5:45 AM – 11:00 PM",
-            "Tuesday: 5:45 AM – 11:00 PM",
-            "Wednesday: 5:45 AM – 11:00 PM",
-            "Thursday: 5:45 AM – 11:00 PM",
-            "Friday: 5:45 AM – 11:00 PM",
-            "Saturday: 5:45 AM – 11:00 PM",
-            "Sunday: 5:45 AM – 11:00 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 1 mins ---> Tokyo Tower"
-          }
-        },
-        {
-          "time": "15:24",
-          "name": "Tokyo Tower",
-          "kind": "attraction",
-          "duration_min": 120,
-          "travel_time_min": 1,
-          "location": {
-            "latitude": 35.6585805,
-            "longitude": 139.7454329,
-            "name": "Tokyo Tower",
-            "address": "4-chōme-2-8 Shibakōen, Minato City, Tokyo 105-0011, Japan"
-          },
-          "rating": 4.5,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: 9:00 AM – 11:00 PM",
-            "Tuesday: 9:00 AM – 11:00 PM",
-            "Wednesday: 9:00 AM – 11:00 PM",
-            "Thursday: 9:00 AM – 11:00 PM",
-            "Friday: 9:00 AM – 11:00 PM",
-            "Saturday: 9:00 AM – 11:00 PM",
-            "Sunday: 9:00 AM – 11:00 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 12 mins ---> Dinner: Uobei Shibuya Dogenzaka Store"
-          }
-        },
-        {
-          "time": "18:53",
-          "name": "Dinner: Uobei Shibuya Dogenzaka Store",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 13,
-          "location": {
-            "latitude": 35.6594349,
-            "longitude": 139.6979207,
-            "name": "Uobei Shibuya Dogenzaka Store",
-            "address": "Japan, 〒150-0043 Tokyo, Shibuya, Dōgenzaka, 2-chōme−29−１１ Central Bldg. 6, １階"
-          },
-          "rating": 4.3,
-          "price_level": "PRICE_LEVEL_INEXPENSIVE",
-          "opening_hours": [
-            "Monday: 11:00 AM – 11:00 PM",
-            "Tuesday: 11:00 AM – 11:00 PM",
-            "Wednesday: 11:00 AM – 11:00 PM",
-            "Thursday: 11:00 AM – 11:00 PM",
-            "Friday: 11:00 AM – 11:00 PM",
-            "Saturday: 10:30 AM – 11:00 PM",
-            "Sunday: 10:30 AM – 11:00 PM"
-          ],
-          "transit_to_next": null
-        },
-        {
-          "time": "20:04",
-          "name": "Return to Hotel (Hotel Gracery Shinjuku)",
-          "kind": "hotel",
-          "duration_min": 0,
-          "travel_time_min": 12,
-          "location": {
-            "latitude": 35.6938,
-            "longitude": 139.7036,
-            "name": "Hotel Gracery Shinjuku",
-            "address": ""
-          },
-          "rating": null,
-          "price_level": null,
-          "opening_hours": [],
-          "transit_to_next": null
-        }
-      ],
-      "attractions": [
-        "Shinjuku Gyoen National Garden",
-        "Meiji Jingu",
-        "Tokyo Tower",
-        "Shibuya Sky"
-      ],
-      "meals": {
-        "breakfast": "Cafe Aaliya",
-        "lunch": "Tokyo American Club",
-        "dinner": "Uobei Shibuya Dogenzaka Store"
-      }
-    },
-    {
-      "day": 2,
-      "date": "2026-09-03",
-      "type": "departure",
-      "valid": false,
-      "schedule": [
-        {
-          "time": "08:01",
-          "name": "Breakfast: Blue Bottle Coffee - Shinjuku Cafe",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 2,
-          "location": {
-            "latitude": 35.6887927,
-            "longitude": 139.70211519999998,
-            "name": "Blue Bottle Coffee - Shinjuku Cafe",
-            "address": "Japan, 〒160-0022 Tokyo, Shinjuku City, Shinjuku, 4-chōme−1−６ NEWoMan SHINJUKU 1F"
-          },
-          "rating": 4.1,
-          "price_level": "PRICE_LEVEL_INEXPENSIVE",
-          "opening_hours": [
-            "Monday: 8:00 AM – 9:00 PM",
-            "Tuesday: 8:00 AM – 9:00 PM",
-            "Wednesday: 8:00 AM – 9:00 PM",
-            "Thursday: 8:00 AM – 9:00 PM",
-            "Friday: 8:00 AM – 9:00 PM",
-            "Saturday: 8:00 AM – 9:00 PM",
-            "Sunday: 8:00 AM – 8:30 PM"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 6 mins ---> Yoyogi Park"
-          }
-        },
-        {
-          "time": "09:08",
-          "name": "Yoyogi Park",
-          "kind": "attraction",
-          "duration_min": 120,
-          "travel_time_min": 7,
-          "location": {
-            "latitude": 35.6700649,
-            "longitude": 139.6949656,
-            "name": "Yoyogi Park",
-            "address": "2-1 Yoyogikamizonochō, Shibuya, Tokyo 151-0052, Japan"
-          },
-          "rating": 4.4,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: Open 24 hours",
-            "Tuesday: Open 24 hours",
-            "Wednesday: Open 24 hours",
-            "Thursday: Open 24 hours",
-            "Friday: Open 24 hours",
-            "Saturday: Open 24 hours",
-            "Sunday: Open 24 hours"
-          ],
-          "transit_to_next": {
-            "mode": "transit",
-            "description": "Transit --- 3 mins ---> Lunch: Tower Records Shibuya"
-          }
-        },
-        {
-          "time": "11:31",
-          "name": "Lunch: Tower Records Shibuya",
-          "kind": "meal",
-          "duration_min": 60,
-          "travel_time_min": 3,
-          "location": {
-            "latitude": 35.661904899999996,
-            "longitude": 139.7010906,
-            "name": "Tower Records Shibuya",
-            "address": "1-chōme-22-14 Jinnan, Shibuya, Tokyo 150-0041, Japan"
-          },
-          "rating": 4.4,
-          "price_level": "",
-          "opening_hours": [
-            "Monday: 11:00 AM – 10:00 PM",
-            "Tuesday: 11:00 AM – 10:00 PM",
-            "Wednesday: 11:00 AM – 10:00 PM",
-            "Thursday: 11:00 AM – 10:00 PM",
-            "Friday: 11:00 AM – 10:00 PM",
-            "Saturday: 11:00 AM – 10:00 PM",
-            "Sunday: 11:00 AM – 10:00 PM"
-          ],
-          "transit_to_next": null
-        },
-        {
-          "time": "15:42",
-          "name": "Depart for Airport (Narita Airport)",
-          "kind": "airport",
-          "duration_min": 0,
-          "travel_time_min": 191,
-          "location": {
-            "latitude": 35.772,
-            "longitude": 140.3929,
-            "name": "Narita Airport",
-            "address": ""
-          },
-          "rating": null,
-          "price_level": null,
-          "opening_hours": [],
-          "transit_to_next": null
-        }
-      ],
-      "attractions": [
-        "Yoyogi Park"
-      ],
-      "meals": {
-        "breakfast": "Blue Bottle Coffee - Shinjuku Cafe",
-        "lunch": "Tower Records Shibuya"
+      "direction": "outbound",
+      "routing_id": "SIN-KUL",
+      "carrier": "AirAsia",
+      "flight_number": "AK 712",
+      "cabin": "Economy",
+      "fare_family": "Standard",
+      "dep_airport": "SIN",
+      "dep_time": "2026-09-16T14:10:00",
+      "arr_airport": "KUL",
+      "arr_time": "2026-09-16T15:20:00",
+      "duration_minutes": 70,
+      "price": {
+        "adult_price": 12.91,
+        "adult_tax": 0.0,
+        "total": 12.91,
+        "currency": "USD"
       }
     }
+  ],
+  "hotels": [
+    {
+      "hotel_id": "holiday-inn-express-kl",
+      "name": "Holiday Inn Express Kuala Lumpur City Centre by IHG",
+      "address": "84, Jalan Raja Chulan, Kuala Lumpur",
+      "city": "Kuala Lumpur",
+      "latitude": null,
+      "longitude": null,
+      "star_rating": null,
+      "stay_schedule": {
+        "check_in_date": "2026-09-16",
+        "check_in_time": "15:00",
+        "check_out_date": "2026-09-17",
+        "check_out_time": "11:00",
+        "total_nights": 1
+      },
+      "selected_room": {
+        "room_name": "Standard Room",
+        "max_occupancy": 2,
+        "price_per_night": 150.0,
+        "total_price": 150.0,
+        "currency": "USD",
+        "breakfast_included": false,
+        "is_refundable": false,
+        "cancellation_policy": null
+      },
+      "available_rooms": []
+    }
+  ],
+  "daily_itinerary": {
+    "destination": "Kuala Lumpur",
+    "start": "2026-09-16",
+    "end": "2026-09-17",
+    "days": [
+      {
+        "day": 0,
+        "date": "2026-09-16",
+        "type": "arrival",
+        "valid": false,
+        "schedule": [
+          {
+            "time": "17:37",
+            "name": "Petronas Twin Towers",
+            "kind": "attraction",
+            "duration_min": 120,
+            "location": {
+              "latitude": 3.1574693,
+              "longitude": 101.7115639,
+              "name": "Petronas Twin Towers",
+              "address": "Lower Ground (Concourse) Level, Menara Berkembar Petronas, Kuala Lumpur City Centre, 50088 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.7,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: Closed",
+              "Tuesday: 9:00 AM – 9:00 PM",
+              "Wednesday: 9:00 AM – 9:00 PM",
+              "Thursday: 9:00 AM – 9:00 PM",
+              "Friday: 9:00 AM – 9:00 PM",
+              "Saturday: 9:00 AM – 9:00 PM",
+              "Sunday: 9:00 AM – 9:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 27 mins ---> Dinner: Menara Kuala Lumpur"
+            }
+          },
+          {
+            "time": "20:05",
+            "name": "Dinner: Menara Kuala Lumpur",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.1528761999999997,
+              "longitude": 101.7038516,
+              "name": "Menara Kuala Lumpur",
+              "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.5,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: 9:00 AM – 10:00 PM",
+              "Tuesday: 9:00 AM – 10:00 PM",
+              "Wednesday: 9:00 AM – 10:00 PM",
+              "Thursday: 9:00 AM – 10:00 PM",
+              "Friday: 9:00 AM – 10:00 PM",
+              "Saturday: 9:00 AM – 10:00 PM",
+              "Sunday: 9:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 15 mins ---> Return to Hotel"
+            }
+          },
+          {
+            "time": "21:21",
+            "name": "Return to Hotel",
+            "kind": "hotel",
+            "duration_min": 0,
+            "location": {
+              "latitude": 3.1507634,
+              "longitude": 101.7086846,
+              "name": "Holiday Inn Express Kuala Lumpur City Centre by IHG",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": null
+          }
+        ],
+        "attractions": [
+          "Petronas Twin Towers"
+        ],
+        "meals": {
+          "breakfast": null,
+          "lunch": null,
+          "dinner": "Menara Kuala Lumpur"
+        }
+      },
+      {
+        "day": 1,
+        "date": "2026-09-17",
+        "type": "departure",
+        "valid": true,
+        "schedule": [
+          {
+            "time": "09:00",
+            "name": "Breakfast: Grumpy Bagels",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.1457067,
+              "longitude": 101.7164868,
+              "name": "Grumpy Bagels",
+              "address": "5, Jalan Kamuning, Off, Jln Imbi, Imbi, 55100 Wilayah Persekutuan, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.6,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "opening_hours": [
+              "Monday: 9:00 AM – 5:00 PM",
+              "Tuesday: 9:00 AM – 5:00 PM",
+              "Wednesday: 9:00 AM – 5:00 PM",
+              "Thursday: 9:00 AM – 5:00 PM",
+              "Friday: 9:00 AM – 5:00 PM",
+              "Saturday: 8:30 AM – 5:00 PM",
+              "Sunday: 8:30 AM – 5:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 23 mins ---> KLCC Park"
+            }
+          },
+          {
+            "time": "10:23",
+            "name": "KLCC Park",
+            "kind": "attraction",
+            "duration_min": 120,
+            "location": {
+              "latitude": 3.1555902,
+              "longitude": 101.71478719999999,
+              "name": "KLCC Park",
+              "address": "City Centre, Kuala Lumpur City Centre, 50450 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.7,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: 6:00 AM – 10:00 PM",
+              "Tuesday: 6:00 AM – 10:00 PM",
+              "Wednesday: 6:00 AM – 10:00 PM",
+              "Thursday: 6:00 AM – 10:00 PM",
+              "Friday: 6:00 AM – 10:00 PM",
+              "Saturday: 6:00 AM – 10:00 PM",
+              "Sunday: 6:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 23 mins ---> Lunch: Damascus Bukit Bintang"
+            }
+          },
+          {
+            "time": "12:46",
+            "name": "Lunch: Damascus Bukit Bintang",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.147299,
+              "longitude": 101.71164429999999,
+              "name": "Damascus Bukit Bintang",
+              "address": "Corner of Jalan Bukit Bintang, and, Jln Sultan Ismail, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.4,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "opening_hours": [
+              "Monday: 8:00 AM – 4:30 AM",
+              "Tuesday: 8:00 AM – 4:30 AM",
+              "Wednesday: 8:00 AM – 4:30 AM",
+              "Thursday: 8:00 AM – 4:30 AM",
+              "Friday: 8:00 AM – 1:00 PM, 2:00 PM – 4:30 AM",
+              "Saturday: 8:00 AM – 4:30 AM",
+              "Sunday: 8:00 AM – 4:30 AM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 9 mins ---> Return to Hotel"
+            }
+          },
+          {
+            "time": "13:55",
+            "name": "Return to Hotel",
+            "kind": "hotel",
+            "duration_min": 0,
+            "location": {
+              "latitude": 3.1507634,
+              "longitude": 101.7086846,
+              "name": "Holiday Inn Express Kuala Lumpur City Centre by IHG",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": null
+          }
+        ],
+        "attractions": [
+          "KLCC Park"
+        ],
+        "meals": {
+          "breakfast": "Grumpy Bagels",
+          "lunch": "Damascus Bukit Bintang",
+          "dinner": null
+        }
+      }
+    ],
+    "error": null
+  },
+  "cost_breakdown": {
+    "flights": 25.82,
+    "activities": 100.0,
+    "food_dining": 200.0,
+    "transportation": 50.0,
+    "currency": "USD"
+  },
+  "travel_tips": [
+    "Book your travel arrangements promptly to secure the best rates.",
+    "The Bukit Bintang area is great for local cafes and shopping.",
+    "Ensure you have local currency or a travel card for small purchases."
   ]
 }

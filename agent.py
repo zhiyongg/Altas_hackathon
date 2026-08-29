@@ -16,7 +16,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 
 # Import schemas and tools from new modules
-from schemas import ItineraryPlan
+from schemas import ItineraryPlan, PlannerItinerary
 from tools import search_flights_atlas, nearby_search, text_search, plan_itinerary
 
 # ==========================================
@@ -78,7 +78,7 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
 
     # 3. Direct Inject: Preserve the deterministic itinerary without LLM loss
     if raw_planner_json and "days" in raw_planner_json:
-        structured_result.daily_itinerary = raw_planner_json
+        structured_result.daily_itinerary = PlannerItinerary.model_validate(raw_planner_json)
 
     return structured_result.model_dump_json(indent=2)
 

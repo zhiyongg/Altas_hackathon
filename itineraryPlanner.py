@@ -48,15 +48,22 @@ def _cache_key(*args):
         return x
     return tuple(norm(a) for a in args)
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
+_cache_lock = threading.Lock()
+
 def cached(fn):
     def wrapper(*args, **kwargs):
         key = (fn.__name__, _cache_key(*args), _cache_key(*sorted(kwargs.items())))
-        if key in _cache:
-            print(f"[CACHE HIT] {fn.__name__}")
-            return _cache[key]
+        with _cache_lock:
+            if key in _cache:
+                print(f"[CACHE HIT] {fn.__name__}")
+                return _cache[key]
         print(f"[API CALL]  {fn.__name__}")
         result = fn(*args, **kwargs)
-        _cache[key] = result
+        with _cache_lock:
+            _cache[key] = result
         return result
     return wrapper
 
@@ -461,7 +468,7 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
 
             # Start touring at 8 AM, OR the check-out time (whichever is earlier)
             start_time = min(default_start, checkout_dt)
-            end_time = departure_dt - timedelta(hours=4)
+            end_time = departure_dt - timedelta(hours=3)
         else:
             start_time = base.replace(hour=8, minute=0)
             end_time = base.replace(hour=21, minute=0)
@@ -629,48 +636,45 @@ def discover_candidates(cfg: TripConfig, pool: dict) -> list[Place]:
     places: list[Place] = []
     hlat, hlng = cfg.hotel["latitude"], cfg.hotel["longitude"]
     banned_primary_types = ["restaurant", "cafe", "bar", "lodging", "hotel"]
-
     discovery_target = pool["discovery_target"]
 
-    # 1. Standard preference theme searches
-    themes = sorted(cfg.preferences.keys(), key=lambda t: cfg.preferences[t], reverse=True)
-    for theme in themes[:pool["n_theme_searches"]]:
-        for raw in search_text(f"{theme} attractions in {cfg.destination}",
-                                max_results=pool["text_results_per_theme"]):
+    def add_results(raws):
+        for raw in raws:
             p = _raw_to_place(raw, "text", cfg.travel_style)
             if p and p.id not in seen and p.primary_type not in banned_primary_types:
                 seen.add(p.id)
                 places.append(p)
 
-    # ── FEATURE 2 INTEGRATION: Semantic Vibe Search Expansion ──
-    if cfg.custom_vibe:
-        vibe_queries = expand_vibe_to_queries(cfg.destination, cfg.custom_vibe)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        # 1. Theme searches + vibe searches, all fired at once
+        futures = []
+        themes = sorted(cfg.preferences.keys(), key=lambda t: cfg.preferences[t], reverse=True)
+        for theme in themes[:pool["n_theme_searches"]]:
+            futures.append(ex.submit(search_text, f"{theme} attractions in {cfg.destination}",
+                                      pool["text_results_per_theme"]))
+
+        vibe_queries = expand_vibe_to_queries(cfg.destination, cfg.custom_vibe) if cfg.custom_vibe else []
         for q in vibe_queries:
-            for raw in search_text(q, max_results=5):
-                p = _raw_to_place(raw, "text", cfg.travel_style)
-                if p and p.id not in seen and p.primary_type not in banned_primary_types:
-                    seen.add(p.id)
-                    places.append(p)
-    # ───────────────────────────────────────────────────────────
+            futures.append(ex.submit(search_text, q, 5))
 
-    # 2. Nearby search expansion passes
-    radius = DISCOVERY_RADIUS_M
-    max_passes = 3 if discovery_target > 80 else (2 if discovery_target > 40 else 1)
+        for fut in as_completed(futures):
+            add_results(fut.result())
 
-    for pass_i in range(max_passes):
-        if len(places) >= discovery_target:
-            break
-        for i in range(0, len(ATTRACTION_TYPES), 5):
-            chunk = ATTRACTION_TYPES[i:i + 5]
-            for raw in search_nearby(hlat, hlng, radius=radius, included_types=chunk,
-                                      max_results=pool["nearby_results_per_chunk"]):
-                p = _raw_to_place(raw, "nearby", cfg.travel_style)
-                if p and p.id not in seen and p.primary_type not in banned_primary_types:
-                    seen.add(p.id)
-                    places.append(p)
+        # 2. Nearby search passes — each pass's chunks run in parallel;
+        #    passes stay sequential since later passes only run if still short.
+        radius = DISCOVERY_RADIUS_M
+        max_passes = 3 if discovery_target > 80 else (2 if discovery_target > 40 else 1)
+        for pass_i in range(max_passes):
             if len(places) >= discovery_target:
                 break
-        radius = int(radius * 1.5)
+            chunk_futures = [
+                ex.submit(search_nearby, hlat, hlng, radius, ATTRACTION_TYPES[i:i + 5],
+                          pool["nearby_results_per_chunk"])
+                for i in range(0, len(ATTRACTION_TYPES), 5)
+            ]
+            for fut in as_completed(chunk_futures):
+                add_results(fut.result())
+            radius = int(radius * 1.5)
 
     log.info("Discovered %d unique candidates (target %d, %d pass(es)).",
               len(places), discovery_target, max_passes)
@@ -681,7 +685,10 @@ def discover_candidates(cfg: TripConfig, pool: dict) -> list[Place]:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _budget_score(p: Place, budget: str) -> float:
-    allowed = BUDGET_PRICE_LEVELS.get(budget.lower(), set())
+    # ── FIX: Safely convert to string in case the LLM passed an integer ──
+    safe_budget = str(budget).lower() if budget else ""
+    allowed = BUDGET_PRICE_LEVELS.get(safe_budget, set())
+    
     if not p.price_level:
         # unknown price → neutral, don't punish
         return 0.5
@@ -1142,6 +1149,17 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
         best_i, best_cost, best_entry = None, float("inf"), None
         for j in unvisited:
             wp = waypoints[j]
+            
+            # --- NEW CHRONOLOGICAL MEAL CHECK ---
+            if wp["kind"] == "meal":
+                meal_name = wp.get("meal_name")
+                if meal_name == "dinner":
+                    # If lunch is in the itinerary, ensure it has been visited first
+                    lunch_idx = next((i for i, w in enumerate(waypoints) if w.get("meal_name") == "lunch"), None)
+                    if lunch_idx is not None and lunch_idx in unvisited:
+                        continue # Skip dinner if lunch hasn't been eaten yet
+            # ------------------------------------
+
             arrival = cur_time + timedelta(seconds=matrix.travel(cur, j))
             entry = arrival
             penalty = 0.0
@@ -1227,26 +1245,13 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
             "meal_name": meal_name,
         })
 
-    # 3. Build route destinations: hotel + attractions + meals + final destination
+    # 3. Build route destinations: hotel + attractions + meals + hotel
     waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel"}]
     for p in day.attractions:
         waypoints.append({"name": p.name, "location": dict(p.location),
                           "kind": "attraction", "place": p})
     waypoints.extend(meal_waypoints)
-    
-    # ── FIX: Route straight to the Airport on departure day ──
-    if day.day_type == "departure":
-        waypoints.append({
-            "name": f"Depart for Airport ({cfg.airport.get('name', 'Airport')})", 
-            "location": dict(cfg.airport), 
-            "kind": "airport"
-        })
-    else:
-        waypoints.append({
-            "name": end_name, 
-            "location": dict(cfg.hotel), 
-            "kind": "hotel"
-        })
+    waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
 
     # 4. ONE route matrix over all waypoints (controls API usage)
     matrix = DayRouteMatrix(cfg, waypoints)
@@ -1393,17 +1398,20 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         })
         cur, prev = depart, loc
 
-    last_wp = day.sequence[-1]
-    last_loc = last_wp["location"]
-    ret_s = last_wp.get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+    last_loc = day.sequence[-1]["location"]
+    ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+    if schedule and ret_s > 0:
+        schedule[-1]["transit_to_next"] = {
+            "mode": cfg.transport_mode.lower(),
+            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> Return to Hotel"
+        }
     schedule.append({
-        "name": last_wp["name"], 
-        "kind": last_wp["kind"], 
+        "name": "Return to Hotel", "kind": "hotel",
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
         "rating": None, "price_level": None, "opening_hours": []
     })
-    
+
     day.schedule = schedule
     return schedule
 
@@ -1487,20 +1495,6 @@ def validate_day(day: DayPlan) -> tuple[bool, list[str]]:
     # ── Chronological meal order: lunch must precede dinner ──
     if "Lunch" in meal_times and "Dinner" in meal_times and meal_times["Lunch"] >= meal_times["Dinner"]:
         v.append("Meals out of order: lunch must precede dinner")
-
-    # ── STRICT GOAL 1: Mandatory meals on normal days ──
-    if day.day_type == "normal":
-        if "Breakfast" not in meal_times: v.append("Missing mandatory Breakfast")
-        if "Lunch" not in meal_times: v.append("Missing mandatory Lunch")
-        if "Dinner" not in meal_times: v.append("Missing mandatory Dinner")
-
-    # ── STRICT GOAL 2: 3 hours before flight ──
-    if day.day_type == "departure" and day.schedule:
-        airport_arr = day.schedule[-1]["arrival"]
-        dep_dt = parse_dt(cfg.departure_datetime)
-        limit_dt = dep_dt - timedelta(hours=3)
-        if airport_arr > limit_dt:
-            v.append(f"Airport arrival {fmt_time(airport_arr)} is less than 3 hours before flight {fmt_time(dep_dt)}")
 
     day.valid = len(v) == 0
     day.violations = v
