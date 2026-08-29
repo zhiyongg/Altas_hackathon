@@ -276,7 +276,7 @@ def plan_itinerary(
     airport_name: str = "",
     airport_lat: float = 0.0,
     airport_lng: float = 0.0,
-    travel_style: str = "moderate",
+    travel_style: str = "packed",
     transport_mode: str = "TRANSIT",
     group_size: int = 2,
     budget: str = "medium",

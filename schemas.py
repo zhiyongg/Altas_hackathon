@@ -69,7 +69,7 @@ class TripConfig:
     # Everything below has a default so agent.py can build a config from just
     # destination, dates and a hotel, and let the planner supply the rest.
     airport: dict = field(default_factory=dict)   # Location-shaped, unused by the pipeline today
-    travel_style: TravelStyle = "moderate"
+    travel_style: TravelStyle = "packed"
     transport_mode: TransportMode = "TRANSIT"
     group_size: int = 2
     budget: BudgetLevel = "medium"
@@ -100,7 +100,7 @@ class DayPlan:
     date: str
     day_type: str                       
     start_time: datetime = field(default_factory=lambda: datetime(2000, 1, 1, 9))
-    end_time: datetime   = field(default_factory=lambda: datetime(2000, 1, 1, 21))
+    end_time: datetime   = field(default_factory=lambda: datetime(2000, 1, 1, 22))
     base_location: dict  = field(default_factory=dict)
     attractions: list    = field(default_factory=list)
     meals: dict          = field(default_factory=dict)

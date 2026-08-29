@@ -1,68 +1,68 @@
 {
   "trip_overview": {
-    "title": "Kuala Lumpur Shopping and Food Escape",
+    "title": "Kuala Lumpur Shopping, Food, and Scenery Escape",
     "origin_city": "SIN",
     "destination_city": "KUL",
-    "start_date": "2026-09-09",
-    "end_date": "2026-09-11",
+    "start_date": "2026-09-08",
+    "end_date": "2026-09-10",
     "total_days": 3,
-    "summary": "A 3-day trip to Kuala Lumpur focused on shopping and culinary experiences, including visits to iconic markets and popular cafes.",
+    "summary": "A 3-day trip to Kuala Lumpur focusing on local food, shopping, and scenic city views.",
     "total_estimated_budget": {
-      "amount": 2000.0,
+      "amount": 2100.0,
       "currency": "USD"
     }
   },
   "flights": [
     {
       "direction": "outbound",
-      "routing_id": "U0lOX0tVTF8xXzIwMjYwOTA5X18yXzBfMHxRUFUxOTk5Nl9hcGlfMXwxfDQzLjQwXzQzLjQwXzQ0Ljc3XzAuMDBfMTMxLjU3X1VTRHxTSU5fS1VMXzFfMjAyNjA5MDlfXzJfMF8wXlNJTi1PRDgwNC1YLUtVTC0yMDI2MDkwOTEyMzAtMjAyNjA5MDkxMzMwLVN1cGVyIFNhdmVyLTEtXjQzLjQwXzQzLjQwXzQ0Ljc3XzAuMDBfMTMxLjU3XkFPRF9BT0ReXkFPRDFTSU5LVUwyMDAyMDI2MDkwOV5TR0ReNTUuMTBeNTUuMTBeNTYuODReMXwwfDIwMjYwODI5MjIxNjQ1fDB8MTc4ODAxMzAwNTAyOTU4N2Y4ODg1fHx8fHwwLjAwfDN8MHx8bm9ybWFsfGZhbHNlfDIwMjYtMDgtMjkgMjI6MTA6MzB8.9e0LNr32ZUv1VVUT4h722Rk4J9XUXDbg8ivCgLH/ACw=",
+      "routing_id": "U0lOX0tVTF8xXzIwMjYwOTA4X18zXzBfMHxRUFUxOTk5Nl9hcGlfMXwxfDM2LjMxXzM2LjMxXzU2Ljg1XzAuMDBfMTI5LjQ3X1VTRHxTSU5fS1VMXzFfMjAyNjA5MDhfXzNfMF8wXlNJTi1PRDgwMi1YLUtVTC0yMDI2MDkwODEwMjAtMjAyNjA5MDgxMTIwLVN1cGVyIFNhdmVyLTEtXjM2LjMxXzM2LjMxXzU2Ljg1XzAuMDBfMTI5LjQ3XkFPRF9BT0ReXkFPRDFTSU5LVUwyMDAyMDI2MDkwOF5TR0ReNDYuMTBeNDYuMTBeNzIuMTdeMXwwfDIwMjYwODMwMDIwNTE4fDB8MTc4ODAyNjcxODU3NDdlOWZlNDM1fHx8fHwwLjAwfDN8MHx8bm9ybWFsfGZhbHNlfDIwMjYtMDgtMzAgMDE6NDQ6Mzd8.vlntWcL+1Zj3Po3pXpYqHVwKZ8utK8z5iy/UgQte4Ag=",
       "carrier": "OD",
-      "flight_number": "OD804",
+      "flight_number": "OD802",
       "cabin": "Economy",
       "fare_family": "Super Saver",
       "dep_airport": "SIN",
-      "dep_time": "12:30",
+      "dep_time": "10:20",
       "arr_airport": "KUL",
-      "arr_time": "13:30",
+      "arr_time": "11:20",
       "duration_minutes": 60,
       "price": {
-        "adult_price": 43.4,
-        "adult_tax": 44.77,
-        "total": 131.57,
+        "adult_price": 36.31,
+        "adult_tax": 56.85,
+        "total": 129.47,
         "currency": "USD"
       }
     }
   ],
   "hotels": [
     {
-      "hotel_id": "grand_hyatt_kl",
-      "name": "Grand Hyatt Kuala Lumpur",
-      "address": null,
-      "city": null,
-      "latitude": null,
-      "longitude": null,
-      "star_rating": null,
-      "rating": null,
-      "review_count": null,
+      "hotel_id": "berjaya_times_square_kl",
+      "name": "Berjaya Times Square Hotel, Kuala Lumpur",
+      "address": "1, Jalan Imbi, Berjaya Times Square, Hotel, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia",
+      "city": "Kuala Lumpur",
+      "latitude": 3.1421189,
+      "longitude": 101.7095374,
+      "star_rating": 5,
+      "rating": 4.3,
+      "review_count": 1000,
       "image_url": null,
       "is_sponsored": false,
-      "dest_id": null,
-      "dest_type": null,
+      "dest_id": "-2400549",
+      "dest_type": "CITY",
       "stay_schedule": {
-        "check_in_date": "2026-09-09",
+        "check_in_date": "2026-09-08",
         "check_in_time": "15:00",
-        "check_out_date": "2026-09-11",
-        "check_out_time": "11:00",
+        "check_out_date": "2026-09-10",
+        "check_out_time": "12:00",
         "total_nights": 2
       },
       "selected_room": {
-        "room_name": "Grand Room",
-        "max_occupancy": 2,
-        "price_per_night": 200.0,
-        "total_price": 400.0,
+        "room_name": "Superior Double Room",
+        "max_occupancy": 3,
+        "price_per_night": 120.0,
+        "total_price": 240.0,
         "currency": "USD",
-        "breakfast_included": false,
-        "is_refundable": false,
+        "breakfast_included": true,
+        "is_refundable": true,
         "cancellation_policy": null
       },
       "available_rooms": []
@@ -70,41 +70,36 @@
   ],
   "daily_itinerary": {
     "destination": "Kuala Lumpur",
-    "start": "2026-09-09",
-    "end": "2026-09-11",
+    "start": "2026-09-08",
+    "end": "2026-09-10",
     "days": [
       {
         "day": 0,
-        "date": "2026-09-09",
+        "date": "2026-09-08",
         "type": "arrival",
-        "valid": true,
+        "valid": false,
         "schedule": [
           {
-            "time": "15:38",
-            "name": "Menara Kuala Lumpur",
-            "kind": "attraction",
-            "duration_min": 120,
+            "time": "13:20",
+            "name": "Arrive & Drop Luggage (Berjaya Times Square Hotel, Kuala Lumpur)",
+            "kind": "hotel",
+            "duration_min": 15,
             "location": {
-              "latitude": 3.1528761999999997,
-              "longitude": 101.7038516,
-              "name": "Menara Kuala Lumpur",
-              "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
+              "address": ""
             },
-            "rating": 4.5,
-            "price_level": "",
-            "opening_hours": [
-              "Monday: 9:00 AM – 10:00 PM",
-              "Tuesday: 9:00 AM – 10:00 PM",
-              "Wednesday: 9:00 AM – 10:00 PM",
-              "Thursday: 9:00 AM – 10:00 PM",
-              "Friday: 9:00 AM – 10:00 PM",
-              "Saturday: 9:00 AM – 10:00 PM",
-              "Sunday: 9:00 AM – 10:00 PM"
-            ],
-            "transit_to_next": null
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 33 mins ---> Dinner: Menara Kuala Lumpur"
+            }
           },
           {
-            "time": "17:38",
+            "time": "18:30",
             "name": "Dinner: Menara Kuala Lumpur",
             "kind": "meal",
             "duration_min": 60,
@@ -125,47 +120,60 @@
               "Saturday: 9:00 AM – 10:00 PM",
               "Sunday: 9:00 AM – 10:00 PM"
             ],
-            "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 13 mins ---> Da Bao Restobar"
-            }
+            "transit_to_next": null
           },
           {
-            "time": "18:52",
-            "name": "Da Bao Restobar",
+            "time": "19:30",
+            "name": "Menara Kuala Lumpur",
             "kind": "attraction",
-            "duration_min": 60,
+            "duration_min": 120,
             "location": {
-              "latitude": 3.1414978,
-              "longitude": 101.69788369999999,
-              "name": "Da Bao Restobar",
-              "address": "145, Jalan Petaling, City Centre, 50000 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1528761999999997,
+              "longitude": 101.7038516,
+              "name": "Menara Kuala Lumpur",
+              "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
             "rating": 4.5,
-            "price_level": "PRICE_LEVEL_MODERATE",
+            "price_level": "",
             "opening_hours": [
-              "Monday: 11:30 AM – 11:00 PM",
-              "Tuesday: 11:30 AM – 11:00 PM",
-              "Wednesday: 11:30 AM – 11:00 PM",
-              "Thursday: 11:30 AM – 11:00 PM",
-              "Friday: 11:30 AM – 12:00 AM",
-              "Saturday: 11:30 AM – 12:00 AM",
-              "Sunday: 11:30 AM – 11:00 PM"
+              "Monday: 9:00 AM – 10:00 PM",
+              "Tuesday: 9:00 AM – 10:00 PM",
+              "Wednesday: 9:00 AM – 10:00 PM",
+              "Thursday: 9:00 AM – 10:00 PM",
+              "Friday: 9:00 AM – 10:00 PM",
+              "Saturday: 9:00 AM – 10:00 PM",
+              "Sunday: 9:00 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 14 mins ---> Return to Hotel"
+              "mode": "transit",
+              "description": "Transit --- 28 mins ---> Hotel Check-in (Berjaya Times Square Hotel, Kuala Lumpur)"
             }
           },
           {
-            "time": "20:06",
-            "name": "Return to Hotel",
+            "time": "21:58",
+            "name": "Hotel Check-in (Berjaya Times Square Hotel, Kuala Lumpur)",
+            "kind": "hotel_checkin",
+            "duration_min": 45,
+            "location": {
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": null
+          },
+          {
+            "time": "22:43",
+            "name": "Return to Hotel (Berjaya Times Square Hotel, Kuala Lumpur)",
             "kind": "hotel",
             "duration_min": 0,
             "location": {
-              "latitude": 3.1478,
-              "longitude": 101.7133,
-              "name": "Grand Hyatt Kuala Lumpur",
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
               "address": ""
             },
             "rating": null,
@@ -175,8 +183,7 @@
           }
         ],
         "attractions": [
-          "Menara Kuala Lumpur",
-          "Da Bao Restobar"
+          "Menara Kuala Lumpur"
         ],
         "meals": {
           "breakfast": null,
@@ -186,7 +193,7 @@
       },
       {
         "day": 1,
-        "date": "2026-09-10",
+        "date": "2026-09-09",
         "type": "normal",
         "valid": true,
         "schedule": [
@@ -213,66 +220,66 @@
               "Sunday: 8:30 AM – 5:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 7 mins ---> Suria KLCC"
+              "mode": "transit",
+              "description": "Transit --- 23 mins ---> KLCC Park"
             }
           },
           {
-            "time": "10:07",
-            "name": "Suria KLCC",
+            "time": "10:23",
+            "name": "KLCC Park",
             "kind": "attraction",
             "duration_min": 120,
             "location": {
-              "latitude": 3.1572757,
-              "longitude": 101.7122335,
-              "name": "Suria KLCC",
-              "address": "Lot No. 241, Level 2Menara, Menara Berkembar Petronas, Kuala Lumpur City Centre, 50088 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1555902,
+              "longitude": 101.71478719999999,
+              "name": "KLCC Park",
+              "address": "City Centre, Kuala Lumpur City Centre, 50450 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.7,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: 6:00 AM – 10:00 PM",
+              "Tuesday: 6:00 AM – 10:00 PM",
+              "Wednesday: 6:00 AM – 10:00 PM",
+              "Thursday: 6:00 AM – 10:00 PM",
+              "Friday: 6:00 AM – 10:00 PM",
+              "Saturday: 6:00 AM – 10:00 PM",
+              "Sunday: 6:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 25 mins ---> Lunch: Niko Neko Matcha 2.0 / Chinatown"
+            }
+          },
+          {
+            "time": "12:49",
+            "name": "Lunch: Niko Neko Matcha 2.0 / Chinatown",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.1427981999999997,
+              "longitude": 101.69639269999999,
+              "name": "Niko Neko Matcha 2.0 / Chinatown",
+              "address": "181, Jalan Tun H S Lee, City Centre, 50000 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
             "rating": 4.6,
-            "price_level": "",
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
             "opening_hours": [
-              "Monday: 10:00 AM – 10:00 PM",
-              "Tuesday: 10:00 AM – 10:00 PM",
-              "Wednesday: 10:00 AM – 10:00 PM",
-              "Thursday: 10:00 AM – 10:00 PM",
-              "Friday: 10:00 AM – 10:00 PM",
-              "Saturday: 10:00 AM – 10:00 PM",
-              "Sunday: 10:00 AM – 10:00 PM"
+              "Monday: 11:00 AM – 6:00 PM",
+              "Tuesday: 11:00 AM – 6:00 PM",
+              "Wednesday: 11:00 AM – 6:00 PM",
+              "Thursday: 11:00 AM – 6:00 PM",
+              "Friday: 11:00 AM – 6:00 PM",
+              "Saturday: 11:00 AM – 6:00 PM",
+              "Sunday: 11:00 AM – 6:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 10 mins ---> Petaling Street Market"
+              "mode": "transit",
+              "description": "Transit --- 5 mins ---> Central Market"
             }
           },
           {
-            "time": "12:17",
-            "name": "Petaling Street Market",
-            "kind": "attraction",
-            "duration_min": 120,
-            "location": {
-              "latitude": 3.1443950999999997,
-              "longitude": 101.69764959999999,
-              "name": "Petaling Street Market",
-              "address": "Jalan Petaling, City Centre, 50000 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
-            },
-            "rating": 4.1,
-            "price_level": "",
-            "opening_hours": [
-              "Monday: 8:00 AM – 10:00 PM",
-              "Tuesday: 10:00 AM – 10:00 PM",
-              "Wednesday: 8:00 AM – 10:00 PM",
-              "Thursday: 10:00 AM – 10:00 PM",
-              "Friday: 10:00 AM – 10:00 PM",
-              "Saturday: 10:00 AM – 10:00 PM",
-              "Sunday: 10:00 AM – 10:00 PM"
-            ],
-            "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 7 mins ---> Central Market"
-            }
-          },
-          {
-            "time": "14:25",
+            "time": "13:54",
             "name": "Central Market",
             "kind": "attraction",
             "duration_min": 120,
@@ -294,39 +301,12 @@
               "Sunday: 10:00 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 9 mins ---> Jalan Alor Food Street"
+              "mode": "transit",
+              "description": "Transit --- 21 mins ---> Dinner: TG's Bistro"
             }
           },
           {
-            "time": "16:34",
-            "name": "Jalan Alor Food Street",
-            "kind": "attraction",
-            "duration_min": 120,
-            "location": {
-              "latitude": 3.146121,
-              "longitude": 101.70927619999999,
-              "name": "Jalan Alor Food Street",
-              "address": "64, 亚罗街, Bukit Bintang, 50200 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
-            },
-            "rating": 4.4,
-            "price_level": "",
-            "opening_hours": [
-              "Monday: 2:30 PM – 12:00 AM",
-              "Tuesday: 2:30 PM – 12:00 AM",
-              "Wednesday: 2:30 PM – 12:00 AM",
-              "Thursday: 2:30 PM – 12:00 AM",
-              "Friday: 2:30 PM – 12:00 AM",
-              "Saturday: 2:30 PM – 12:00 AM",
-              "Sunday: 2:30 PM – 12:00 AM"
-            ],
-            "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 2 mins ---> Dinner: TG's Bistro"
-            }
-          },
-          {
-            "time": "18:37",
+            "time": "18:30",
             "name": "Dinner: TG's Bistro",
             "kind": "meal",
             "duration_min": 60,
@@ -348,19 +328,19 @@
               "Sunday: Open 24 hours"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 9 mins ---> Return to Hotel"
+              "mode": "transit",
+              "description": "Transit --- 15 mins ---> Return to Hotel (Berjaya Times Square Hotel, Kuala Lumpur)"
             }
           },
           {
-            "time": "19:46",
-            "name": "Return to Hotel",
+            "time": "19:45",
+            "name": "Return to Hotel (Berjaya Times Square Hotel, Kuala Lumpur)",
             "kind": "hotel",
             "duration_min": 0,
             "location": {
-              "latitude": 3.1478,
-              "longitude": 101.7133,
-              "name": "Grand Hyatt Kuala Lumpur",
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
               "address": ""
             },
             "rating": null,
@@ -370,25 +350,42 @@
           }
         ],
         "attractions": [
-          "Suria KLCC",
-          "Jalan Alor Food Street",
-          "Central Market",
-          "Petaling Street Market"
+          "KLCC Park",
+          "Central Market"
         ],
         "meals": {
           "breakfast": "Grumpy Bagels",
-          "lunch": null,
+          "lunch": "Niko Neko Matcha 2.0 / Chinatown",
           "dinner": "TG's Bistro"
         }
       },
       {
         "day": 2,
-        "date": "2026-09-11",
+        "date": "2026-09-10",
         "type": "departure",
-        "valid": false,
+        "valid": true,
         "schedule": [
           {
-            "time": "08:04",
+            "time": "08:00",
+            "name": "Check-out & Leave Bags (Berjaya Times Square Hotel, Kuala Lumpur)",
+            "kind": "hotel",
+            "duration_min": 0,
+            "location": {
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": {
+              "mode": "transit",
+              "description": "Transit --- 18 mins ---> Breakfast: Feeka Coffee Roasters"
+            }
+          },
+          {
+            "time": "08:18",
             "name": "Breakfast: Feeka Coffee Roasters",
             "kind": "meal",
             "duration_min": 60,
@@ -410,73 +407,73 @@
               "Sunday: 8:00 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 8 mins ---> Sungei Wang Plaza"
+              "mode": "transit",
+              "description": "Transit --- 34 mins ---> Perdana Botanical Gardens"
             }
           },
           {
-            "time": "10:00",
-            "name": "Sungei Wang Plaza",
+            "time": "09:52",
+            "name": "Perdana Botanical Gardens",
             "kind": "attraction",
             "duration_min": 120,
             "location": {
-              "latitude": 3.1450120999999998,
-              "longitude": 101.71128759999999,
-              "name": "Sungei Wang Plaza",
-              "address": "Jln Sultan Ismail, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1423617,
+              "longitude": 101.6842439,
+              "name": "Perdana Botanical Gardens",
+              "address": "Jalan Kebun Bunga, Tasik Perdana, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
-            "rating": 4.1,
+            "rating": 4.5,
             "price_level": "",
             "opening_hours": [
-              "Monday: 10:00 AM – 10:00 PM",
-              "Tuesday: 10:00 AM – 10:00 PM",
-              "Wednesday: 10:00 AM – 10:00 PM",
-              "Thursday: 10:00 AM – 10:00 PM",
-              "Friday: 10:00 AM – 10:00 PM",
-              "Saturday: 10:00 AM – 10:00 PM",
-              "Sunday: 10:00 AM – 10:00 PM"
+              "Monday: 5:30 AM – 10:00 PM",
+              "Tuesday: 5:30 AM – 10:00 PM",
+              "Wednesday: 5:30 AM – 10:00 PM",
+              "Thursday: 5:30 AM – 10:00 PM",
+              "Friday: 5:30 AM – 12:00 AM",
+              "Saturday: 5:30 AM – 12:00 AM",
+              "Sunday: 5:30 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 1 mins ---> Lunch: Damascus Bukit Bintang"
+              "mode": "transit",
+              "description": "Transit --- 34 mins ---> Lunch: Punjabi Rasoi - Brickfields"
             }
           },
           {
-            "time": "12:01",
-            "name": "Lunch: Damascus Bukit Bintang",
+            "time": "12:26",
+            "name": "Lunch: Punjabi Rasoi - Brickfields",
             "kind": "meal",
-            "duration_min": 58,
+            "duration_min": 60,
             "location": {
-              "latitude": 3.147299,
-              "longitude": 101.71164429999999,
-              "name": "Damascus Bukit Bintang",
-              "address": "Corner of Jalan Bukit Bintang, and, Jln Sultan Ismail, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1320561,
+              "longitude": 101.6878523,
+              "name": "Punjabi Rasoi - Brickfields",
+              "address": "45, Jalan Thambipillay, Brickfields, 50470 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
-            "rating": 4.4,
+            "rating": 4.8,
             "price_level": "PRICE_LEVEL_MODERATE",
             "opening_hours": [
-              "Monday: 8:00 AM – 4:30 AM",
-              "Tuesday: 8:00 AM – 4:30 AM",
-              "Wednesday: 8:00 AM – 4:30 AM",
-              "Thursday: 8:00 AM – 4:30 AM",
-              "Friday: 8:00 AM – 1:00 PM, 2:00 PM – 4:30 AM",
-              "Saturday: 8:00 AM – 4:30 AM",
-              "Sunday: 8:00 AM – 4:30 AM"
+              "Monday: 10:30 AM – 12:00 AM",
+              "Tuesday: 10:30 AM – 12:00 AM",
+              "Wednesday: 10:30 AM – 12:00 AM",
+              "Thursday: 10:30 AM – 12:00 AM",
+              "Friday: 10:30 AM – 12:00 AM",
+              "Saturday: 10:30 AM – 12:00 AM",
+              "Sunday: 10:30 AM – 12:00 AM"
             ],
             "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 7 mins ---> Return to Hotel"
+              "mode": "transit",
+              "description": "Transit --- 19 mins ---> Pick Up Bags & Depart for Airport"
             }
           },
           {
-            "time": "13:07",
-            "name": "Return to Hotel",
+            "time": "13:46",
+            "name": "Pick Up Bags & Depart for Airport",
             "kind": "hotel",
             "duration_min": 0,
             "location": {
-              "latitude": 3.1478,
-              "longitude": 101.7133,
-              "name": "Grand Hyatt Kuala Lumpur",
+              "latitude": 3.1421189,
+              "longitude": 101.7095374,
+              "name": "Berjaya Times Square Hotel, Kuala Lumpur",
               "address": ""
             },
             "rating": null,
@@ -486,11 +483,11 @@
           }
         ],
         "attractions": [
-          "Sungei Wang Plaza"
+          "Perdana Botanical Gardens"
         ],
         "meals": {
           "breakfast": "Feeka Coffee Roasters",
-          "lunch": "Damascus Bukit Bintang",
+          "lunch": "Punjabi Rasoi - Brickfields",
           "dinner": null
         }
       }
@@ -498,8 +495,8 @@
     "error": null
   },
   "cost_breakdown": {
-    "flights": 263.14,
-    "hotels": 400.0,
+    "flights": 388.41,
+    "hotels": 240.0,
     "activities": 150.0,
     "food_dining": 300.0,
     "transportation": 100.0,
@@ -507,8 +504,8 @@
   },
   "travel_tips": [
     "Use Grab for convenient and affordable transportation around the city.",
-    "Visit the local markets like Petaling Street early to avoid the midday heat.",
-    "Try the local street food at Jalan Alor for an authentic experience.",
-    "Ensure you have a universal travel adapter for Malaysia's Type G power outlets."
+    "Stay hydrated as Kuala Lumpur is hot and humid year-round.",
+    "Dress modestly when visiting religious sites.",
+    "Carry a portable charger for long days of sightseeing."
   ]
 }
