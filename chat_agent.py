@@ -1,5 +1,5 @@
 """
-chat.py — the full post-creation chatbot layer consolidated into ONE file.
+chat_agent.py — the full post-creation chatbot layer consolidated into ONE file.
 
 This is a straight merge of the original six modules, in dependency order,
 with NO behavioral changes:

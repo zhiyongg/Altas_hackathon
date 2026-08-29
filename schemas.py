@@ -273,3 +273,72 @@ class CreateCheckoutSessionsRequest(BaseModel):
     success_url: str
     cancel_url: str
 
+class FlightSegmentInfo(BaseModel):
+    time: str
+    date: str            # ISO YYYY-MM-DD
+    date_label: str       # "6 Jan, Tuesday" for display
+    airport_code: str
+    airport_name: Optional[str] = None
+
+
+class FlightOption(BaseModel):
+    id: str
+    airline: str
+    airline_code: Optional[str] = None
+    flight_number: str
+    departure: FlightSegmentInfo
+    arrival: FlightSegmentInfo
+    duration_minutes: Optional[int] = None
+    stops: int = 0
+    layover_text: str = "Direct"
+    price: float
+    currency: str = "USD"
+    seats_left: Optional[int] = None
+    is_refundable: bool = False
+
+
+class FlightSearchRequest(BaseModel):
+    origin: str
+    destination: str
+    depart_date: str
+    return_date: Optional[str] = None
+    adults: int = 1
+    children: int = 0
+    infants: int = 0
+
+
+class FlightChangeApplyRequest(BaseModel):
+    session_id: str = "testing"
+    output_path: Optional[str] = None
+    flight: FlightOption
+    trip_config: Optional[dict] = None
+
+
+# --- Activity Models ---
+# Field names are deliberately camelCase (not this file's usual snake_case)
+# to match the ActivityOption interface already defined in the frontend's
+# types.ts, which mirrors its existing camelCase mock data shape rather
+# than the snake_case convention used by RoomOption/FlightOption above.
+class ActivityOption(BaseModel):
+    id: str = Field(description="Google Place ID")
+    title: str
+    category: str = Field(description="Coarse category bucket: Dining, Cafe, Culture, Nature, Shopping, or Activity")
+    categoryIcon: str = ""
+    rating: float = 0.0
+    reviewsCount: Optional[int] = None
+    distance: str = Field(default="—", description="Human-readable distance from the search origin, e.g. '450m' or '2.3km'")
+    priceLabel: str = ""
+    image: str = Field(default="", description="Places API photo URL; empty string if the place has no photo")
+    isSponsored: bool = False
+    description: str = ""
+    timeSlot: Optional[str] = None
+    isFavorite: bool = False
+    latitude: Optional[float] = Field(default=None, description="Needed for mapCoords/location when the activity is added to the itinerary")
+    longitude: Optional[float] = None
+    address: Optional[str] = None
+
+
+class ActivitySearchRequest(BaseModel):
+    query: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None

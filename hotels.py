@@ -5,16 +5,25 @@ from tools import search_hotels_raw, get_hotel_prices_raw
 
 
 def _parse_review_and_image(item: dict) -> tuple[float | None, int | None, str | None]:
-    """Shared helper: pull guest rating, review count, and a photo URL out of a
-    StayAPI/Booking.com-shaped hotel dict, trying the field names StayAPI is
-    known to use plus a few common aliases."""
-    rating_raw = item.get("rating") or item.get("review_score") or item.get("reviewScore")
+    """Pull guest rating, review count, and a photo URL out of a
+    StayAPI/Booking.com-shaped hotel dict. Real /v1/booking/search results
+    nest rating as {"rating": {"score": 8.3, "review_count": 3634, ...}} —
+    treating that dict as a bare number (float(rating_raw) on a dict) raises
+    TypeError, which the old except clause silently swallowed, dropping
+    every real rating. This checks for the dict shape first."""
+    rating_field = item.get("rating")
+    if isinstance(rating_field, dict):
+        rating_raw = rating_field.get("score")
+        count_raw = rating_field.get("review_count")
+    else:
+        rating_raw = rating_field or item.get("review_score") or item.get("reviewScore")
+        count_raw = item.get("review_nr") or item.get("review_count") or item.get("reviewsCount")
+
     try:
         rating = round(float(rating_raw), 1) if rating_raw is not None else None
     except (ValueError, TypeError):
         rating = None
 
-    count_raw = item.get("review_nr") or item.get("review_count") or item.get("reviewsCount")
     try:
         review_count = int(count_raw) if count_raw is not None else None
     except (ValueError, TypeError):
@@ -31,11 +40,18 @@ def _parse_review_and_image(item: dict) -> tuple[float | None, int | None, str |
     return rating, review_count, image_url
 
 
-def _parse_lead_price(item: dict) -> tuple[float | None, str]:
-    """Pull a lead-in nightly rate straight off a /v1/booking/search result item,
-    if StayAPI supplied one there (it's often null - a real per-hotel price
-    still needs get_hotel_prices/_parse_room_options for room-level detail,
-    but this gives something better than a hardcoded 0.0 when it's available)."""
+def _parse_lead_price(item: dict, nights: int = 1) -> tuple[float | None, float | None, str]:
+    """Pull the lead-in price off a /v1/booking/search result item.
+
+    Confirmed against a real StayAPI response: "price" — either a bare
+    amount or {"amount": 873.69, "currency": "USD", ...} — is the TOTAL
+    for the whole stay being searched (checkin -> checkout), not a nightly
+    rate. Returns (price_per_night, total_price, currency) so callers store
+    both correctly instead of treating an already-total figure as nightly
+    and then re-multiplying it by `nights` on top (the old bug: a $291/night,
+    3-night stay totalling $874 was displayed as "$874/night" and its
+    "total" computed as $874 x 3 = $2,621).
+    """
     price_raw = item.get("price")
     currency = "USD"
     if isinstance(price_raw, dict):
@@ -44,9 +60,15 @@ def _parse_lead_price(item: dict) -> tuple[float | None, str]:
     else:
         amount = price_raw
     try:
-        return (float(amount), currency) if amount is not None else (None, currency)
+        total = float(amount) if amount is not None else None
     except (ValueError, TypeError):
-        return None, currency
+        total = None
+
+    if total is None:
+        return None, None, currency
+
+    nightly = total / nights if nights else total
+    return nightly, total, currency
 
 
 def _parse_coords(item: dict) -> tuple[float | None, float | None]:
@@ -175,7 +197,12 @@ def search_mock_hotels(
             star_rating = None
 
         rating, review_count, image_url = _parse_review_and_image(item)
-        lead_price, lead_currency = _parse_lead_price(item)
+        lead_nightly, lead_total, lead_currency = _parse_lead_price(item, total_nights)
+        # Real search results carry a top-level room_name (e.g. "Superior
+        # Double Room") even before per-room backfill runs — keep it instead
+        # of "" so this card isn't excluded by getSelectableRooms on the
+        # frontend (which filters out rooms with no room_name).
+        lead_room_name = item.get("room_name") or ""
 
         hotels.append(Hotel(
             hotel_id=hotel_id,
@@ -199,10 +226,10 @@ def search_mock_hotels(
             # Uses the search endpoint's own lead-in price if StayAPI gave one;
             # otherwise stays a 0.0 placeholder until backfill_hotel_rooms runs.
             selected_room=RoomOption(
-                room_name="",
+                room_name=lead_room_name,
                 max_occupancy=0,
-                price_per_night=lead_price or 0.0,
-                total_price=round((lead_price or 0.0) * total_nights, 2),
+                price_per_night=round(lead_nightly, 2) if lead_nightly is not None else 0.0,
+                total_price=round(lead_total, 2) if lead_total is not None else 0.0,
                 currency=lead_currency,
             ),
         ))
@@ -325,32 +352,36 @@ def _parse_room_options(raw: dict, checkin: str, checkout: str) -> list[RoomOpti
                      or block.get("block_name") or "Room")
 
         # --- price ---
-        # StayAPI's hotel/prices endpoint gives pre-formatted display strings
-        # ("$311") for price_per_night/total_price, with the actual usable
-        # numbers in separate *_value fields (price_per_night_value: 310.94).
-        # float("$311") throws, so those _value fields must be tried first;
-        # the plain fields are kept as a fallback for other response shapes
-        # that might give bare numbers there instead.
+        # Only explicitly-named "per night" fields count as nightly. Bare
+        # "price"/"price_value"/"amount" fields are conventionally the STAY
+        # TOTAL on these block shapes (confirmed on the /v1/booking/search
+        # item-level "price" field against a real response — see
+        # _parse_lead_price), not a nightly rate, so they belong on the
+        # total side. Treating them as nightly and then re-multiplying by
+        # `nights` for total double-counts the stay length.
         nightly = _first_float(
             block.get("price_per_night_value"),
-            block.get("price_value"),
             block.get("price_per_night"),
-            block.get("price"),
             block.get("nightly_price"),
-            block.get("amount"),
         )
-        if nightly is None:
-            nightly = 0.0
-        cur = block.get("currency") or "USD"
-
         total = _first_float(
             block.get("total_price_value"),
             block.get("total_value"),
             block.get("total_price"),
             block.get("total"),
+            block.get("price_value"),
+            block.get("price"),
+            block.get("amount"),
         )
+
+        if nightly is None and total is not None:
+            nightly = total / nights
+        if nightly is None:
+            nightly = 0.0
         if total is None:
             total = nightly * nights
+
+        cur = block.get("currency") or "USD"
 
         occupancy = (block.get("max_occupancy") or block.get("max_persons")
                      or block.get("max_guests") or block.get("occupancy")
@@ -480,7 +511,8 @@ def extract_hotel_ui_cards(
             star_rating = None
 
         rating, review_count, image_url = _parse_review_and_image(item)
-        lead_price, lead_currency = _parse_lead_price(item)
+        lead_nightly, lead_total, lead_currency = _parse_lead_price(item, total_nights)
+        lead_room_name = item.get("room_name") or ""
 
         hotels.append(Hotel(
             hotel_id=hotel_id,
@@ -505,10 +537,10 @@ def extract_hotel_ui_cards(
             # (often null there); get_hotel_ui_cards's caller (api.py) backfills
             # this with real per-room data from get_hotel_prices afterwards.
             selected_room=RoomOption(
-                room_name="",
+                room_name=lead_room_name,
                 max_occupancy=0,
-                price_per_night=lead_price or 0.0,
-                total_price=round((lead_price or 0.0) * total_nights, 2),
+                price_per_night=round(lead_nightly, 2) if lead_nightly is not None else 0.0,
+                total_price=round(lead_total, 2) if lead_total is not None else 0.0,
                 currency=lead_currency,
             ),
             available_rooms=[],
@@ -546,4 +578,3 @@ def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, r
     card["selected_room"] = sorted_rooms[0].model_dump()
     card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
     return True
-

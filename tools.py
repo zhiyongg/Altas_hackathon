@@ -100,6 +100,58 @@ def extract_flight_ui_cards(res_data: dict) -> list[dict]:
     return cards
 
 # ==========================================
+# Flight Search (raw HTTP call, reusable outside the @tool wrapper)
+# ==========================================
+def search_flights_raw(
+    origin: str,
+    destination: str,
+    from_date: str,
+    return_date: Optional[str],
+    adults: int,
+    children: int,
+    infants: int,
+) -> dict:
+    """Call the Atlas Flight API and return the raw JSON response (or
+    {"error": ...} on failure). Extracted out of search_flights_atlas so
+    REST endpoints (api.py's /flight/change) can call it directly without
+    going through the LangChain @tool wrapper or its pre-formatted-string
+    output (flights.py needs numeric fields, not "$311.00" strings)."""
+    if not ATLAS_CLIENT_ID or not ATLAS_CLIENT_SECRET:
+        return {"error": "Missing Atlas credentials."}
+
+    url = f"{ATLAS_BASE_URL}/search.do"
+    payload = {
+        "tripType": "2" if return_date else "1",  # 1 = Oneway, 2 = Return
+        "adultNum": adults,
+        "childNum": children,
+        "infantNum": infants,
+        "fromCity": origin.upper(),
+        "toCity": destination.upper(),
+        "fromDate": from_date.replace("-", ""),
+        "retDate": return_date.replace("-", "") if return_date else "",
+        "includeMultipleFareFamily": False,
+        "currency": "USD",
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "x-atlas-client-id": ATLAS_CLIENT_ID,
+        "x-atlas-client-secret": ATLAS_CLIENT_SECRET,
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        res = response.json()
+
+        if res.get('status') == "Success" or res.get('routings'):
+            return res
+        return {"error": "No flights found or error in request", "details": res}
+    except Exception as e:
+        return {"error": str(e)}
+
+# ==========================================
 # Agent Tools
 # ==========================================
 @tool
@@ -109,50 +161,17 @@ def search_flights_atlas(origin: str, destination: str, fromDate: str, returnDat
     Args:
         origin: Origin airport code (e.g., KUL)
         destination: Destination airport code (e.g., BKI)
-        date: Flight date (YYYY-MM-DD)
+        fromDate: Flight date (YYYY-MM-DD)
+        returnDate: Return date (YYYY-MM-DD)
         adults: Number of adult passengers
         children: Number of child passengers
-        infants: Number of infant passengers 
+        infants: Number of infant passengers
+
     """
-    if not ATLAS_CLIENT_ID or not ATLAS_CLIENT_SECRET:
-        return json.dumps({"error": "Missing Atlas credentials."})
-        
-    url = f"{ATLAS_BASE_URL}/search.do"
-    clean_fromDate = fromDate.replace("-", "")
-    clean_returnDate = returnDate.replace("-", "")
-    payload = {
-        "tripType": "1", # 1 = Oneway, 2 = Return
-        "adultNum": adults,
-        "childNum": children,
-        "infantNum": infants,
-        "fromCity": origin.upper(),
-        "toCity": destination.upper(),
-        "fromDate": clean_fromDate,
-        "retDate": clean_returnDate,
-        "includeMultipleFareFamily": False,
-        "currency": "USD"
-    }
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "x-atlas-client-id": ATLAS_CLIENT_ID,
-        "x-atlas-client-secret": ATLAS_CLIENT_SECRET,
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        res = response.json()
-        
-        if res.get('status') == "Success" or res.get('routings'):
-            flight_cards = extract_flight_ui_cards(res)
-            return json.dumps(flight_cards)
-        else:
-            return json.dumps({"error": "No flights found or error in request", "details": res})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+    res = search_flights_raw(origin, destination, fromDate, returnDate, adults, children, infants)
+    if "error" in res:
+        return json.dumps(res)
+    return json.dumps(extract_flight_ui_cards(res))
 
 @tool
 def nearby_search(location: str, keyword: str) -> str:
@@ -257,7 +276,7 @@ def text_search(query: str) -> str:
                 "priceLevel": place.get("priceLevel", "PRICE_LEVEL_UNSPECIFIED"),
                 "primaryType": place.get("primaryType"),
             })
-            
+                
         return json.dumps(results)
     except Exception as e:
         return json.dumps({"error": f"API Error: {str(e)}"})
@@ -276,16 +295,17 @@ def plan_itinerary(
     airport_name: str = "",
     airport_lat: float = 0.0,
     airport_lng: float = 0.0,
-    travel_style: str = "moderate",
+    travel_style: str = "",
     transport_mode: str = "TRANSIT",
     group_size: int = 2,
-    budget: str = "medium",
+    budget: str = "",
     check_in_time: str = "14:00",
     check_out_time: str = "11:00",
     custom_vibe: str = ""
 ) -> str:
     """
-    Plan the daily itinerary of attractions and meals. 
+    Plan the daily itinerary of attractions and meals.
+    
     Call this AFTER finding flights and a hotel to combine them into an itinerary.
     Args:
         destination: The destination city
