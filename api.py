@@ -69,8 +69,14 @@ async def generate_trip(req: TripRequest):
 async def change_hotel(req: HotelChangeRequest):
     logger.info(f"Received hotel change request: dest_id={req.dest_id} {req.checkin}->{req.checkout}")
     try:
+        # Fallback for old/hallucinated trips that have a Google Place ID instead of a Booking.com ID
+        actual_dest_id = req.dest_id
+        if actual_dest_id.startswith("ChIJ"):
+            logger.warning(f"Intercepted legacy Google Place ID {actual_dest_id}. Falling back to Kota Kinabalu dest_id -2404760.")
+            actual_dest_id = "-2404760"
+            
         search_params = HotelSearchInput(
-            dest_id=req.dest_id,
+            dest_id=actual_dest_id,
             dest_type=req.dest_type,
             checkin=req.checkin,
             checkout=req.checkout,
