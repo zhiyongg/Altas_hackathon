@@ -1108,14 +1108,17 @@ def find_meal_restaurant(meal_name: str, location: dict, cfg: TripConfig,
 
 
 def _entry_window(day: DayPlan, wp: dict):
-    """Return (open_dt, close_dt) bounding when a waypoint may be entered, or
-    None if it has no temporal restriction."""
     if wp["kind"] == "meal":
         return _meal_window_datetimes(day, wp.get("meal_name"))
+    
+    # Allow hotel check-in from check-in time onward
+    if wp["kind"] == "hotel_checkin":
+        cin_time = dtime(15, 0)
+        return (_combine_date_time(day.date, cin_time), _combine_date_time(day.date, dtime(22, 0)))
+
     place = wp.get("place")
     if not place:
         return None
-    # Nightlife gets a virtual evening window so it is deferred to late day.
     if wp["kind"] == "attraction" and any(t in NIGHTLIFE_TYPES for t in place.types):
         return (_combine_date_time(day.date, NIGHTLIFE_VIRTUAL_OPEN),
                 _combine_date_time(day.date, NIGHTLIFE_VIRTUAL_CLOSE))
@@ -1130,17 +1133,10 @@ def _entry_window(day: DayPlan, wp: dict):
 
 
 def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day: DayPlan) -> list[int]:
-    """Time-window aware greedy route optimizer.
-
-    Meals are first-class nodes: because each candidate's cost includes how long
-    we would have to wait before entering it, breakfast snaps to the morning,
-    lunch to midday and dinner to the evening -- while a meal's real location
-    still influences which attractions sit before/after it.
-    """
     n = len(waypoints)
     if n <= 2:
         return list(range(n))
-    unvisited = set(range(1, n - 1))          # exclude hotel start (0) & hotel end
+    unvisited = set(range(1, n - 1))
     order = [0]
     cur = 0
     cur_time = day.start_time
@@ -1150,71 +1146,75 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
         for j in unvisited:
             wp = waypoints[j]
             
-            # --- NEW CHRONOLOGICAL MEAL CHECK ---
-            if wp["kind"] == "meal":
+            # 1. STRICT CHRONOLOGICAL MEAL PRECEDENCE
+            if wp.get("kind") == "meal":
                 meal_name = wp.get("meal_name")
+                if meal_name == "lunch":
+                    bf_idx = next((i for i, w in enumerate(waypoints) if w.get("meal_name") == "breakfast"), None)
+                    if bf_idx is not None and bf_idx in unvisited:
+                        continue
                 if meal_name == "dinner":
-                    # If lunch is in the itinerary, ensure it has been visited first
-                    lunch_idx = next((i for i, w in enumerate(waypoints) if w.get("meal_name") == "lunch"), None)
-                    if lunch_idx is not None and lunch_idx in unvisited:
-                        continue # Skip dinner if lunch hasn't been eaten yet
-            # ------------------------------------
+                    prior_meals = [i for i, w in enumerate(waypoints) if w.get("meal_name") in ("breakfast", "lunch")]
+                    if any(m_idx in unvisited for m_idx in prior_meals):
+                        continue
 
             arrival = cur_time + timedelta(seconds=matrix.travel(cur, j))
             entry = arrival
             penalty = 0.0
+            
+            # 2. PENALIZE BACK-TO-BACK MEALS
+            prev_wp = waypoints[cur]
+            has_unvisited_attractions = any(waypoints[u].get("kind") == "attraction" for u in unvisited)
+            if prev_wp.get("kind") == "meal" and wp.get("kind") == "meal" and has_unvisited_attractions:
+                penalty += 1e5 
+
             window = _entry_window(day, wp)
             if window:
                 lo, hi = window
                 if entry < lo:
                     entry = lo
                 if entry > hi:
-                    penalty = 1e7  # cannot be entered within its window -> defer
+                    penalty += 1e7  # Missed window
+                
+                # 3. MEAL GRAVITY: Force optimizer to eat if inside the window
+                if wp.get("kind") == "meal" and lo <= entry <= hi:
+                    time_left = (hi - entry).total_seconds()
+                    if time_left < 7200: # Less than 2 hours left -> Extreme Priority
+                        penalty -= 1e6 
+                    else: # Inside window -> High Priority
+                        penalty -= 50000 
+
             cost = (entry - cur_time).total_seconds() + penalty
             if cost < best_cost:
                 best_cost, best_i, best_entry = cost, j, entry
+
         if best_i is None:
             break
+
         order.append(best_i)
         unvisited.discard(best_i)
         cur = best_i
         place = waypoints[best_i].get("place")
-        dur = place.visit_duration_min if place else 60
+        dur = wp.get("duration_min") if wp.get("duration_min") else (place.visit_duration_min if place else 60)
         cur_time = best_entry + timedelta(minutes=dur)
 
     order.append(n - 1)
     return order
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STAGE 7 — ROUTE OPTIMIZATION WITH MEALS AS FIRST-CLASS NODES
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> None:
-    """Full per-day routing pipeline with meals as FIRST-CLASS route nodes.
-
-    attraction allocation (done upstream)
-      -> cheap simulation to locate meal gaps
-      -> find meal restaurant candidates
-      -> build route destinations (hotel + attractions + meals + hotel)
-      -> ONE route matrix over all destinations (API-controlled)
-      -> temporal route optimization (meals influence the ordering)
-      -> travel times read back from the same cached matrix
-      -> schedule against opening hours + meal windows
-    """
-    # SAFETY RAIL: cap attractions
     if len(day.attractions) > 8:
         log.warning("Day %d has %d attractions. Truncating to 8.", day.day_index, len(day.attractions))
         day.attractions = day.attractions[:8]
 
-    # Smart hotel naming
-    if day.day_type == "arrival":
-        start_name = f"Drop Luggage ({cfg.hotel.get('name', '')})"
-        end_name = f"Check-in & Rest ({cfg.hotel.get('name', '')})"
-    elif day.day_type == "departure":
-        start_name = f"Check-out & Leave Bags ({cfg.hotel.get('name', '')})"
+    # ── REPLACE FROM HERE ──
+    if day.day_type == "departure":
         end_name = f"Pick Up Bags & Depart for Airport"
     else:
-        start_name = f"Leave Hotel ({cfg.hotel.get('name', '')})"
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
 
     # Free any restaurants reserved on a previous pass for this day.
@@ -1246,25 +1246,52 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
         })
 
     # 3. Build route destinations: hotel + attractions + meals + hotel
-    waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel"}]
+    cin_time = datetime.strptime(cfg.check_in_time, "%H:%M").time()
+    base_d = datetime.strptime(day.date, "%Y-%m-%d")
+    check_in_dt = base_d.replace(hour=cin_time.hour, minute=cin_time.minute)
+
+    start_duration = 0
+    if day.day_type == "arrival":
+        if day.start_time >= check_in_dt:
+            # Arrive after check-in opens -> check in immediately
+            start_name = f"Arrive & Check-in ({cfg.hotel.get('name', '')})"
+            start_duration = 45 
+        else:
+            # Arrive early -> drop bags now, check-in later mid-day
+            start_name = f"Arrive & Drop Luggage ({cfg.hotel.get('name', '')})"
+            start_duration = 15
+    elif day.day_type == "departure":
+        start_name = f"Check-out & Leave Bags ({cfg.hotel.get('name', '')})"
+    else:
+        start_name = f"Leave Hotel ({cfg.hotel.get('name', '')})"
+
+    waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel", "duration_min": start_duration}]
+    
     for p in day.attractions:
         waypoints.append({"name": p.name, "location": dict(p.location),
                           "kind": "attraction", "place": p})
+
+    # Mid-day check-in (Only if we arrived early and crossed the threshold)
+    if day.day_type == "arrival" and day.start_time < check_in_dt < day.end_time:
+        waypoints.append({
+            "name": f"Hotel Check-in ({cfg.hotel.get('name', '')})",
+            "location": dict(cfg.hotel),
+            "kind": "hotel_checkin",
+            "duration_min": 45,
+            "place": None
+        })
+
     waypoints.extend(meal_waypoints)
     waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
-
+    
     # 4. ONE route matrix over all waypoints (controls API usage)
     matrix = DayRouteMatrix(cfg, waypoints)
-
-    # 5. Temporal-aware route optimization (meals influence attraction order)
     order = _optimize_route_temporal(waypoints, matrix, day)
     day.sequence = [waypoints[i] for i in order]
 
-    # 6. Travel times straight from the cached matrix (no extra API calls)
     for k in range(1, len(order)):
         day.sequence[k]["travel_sec_from_prev"] = matrix.travel(order[k - 1], order[k])
 
-    # 7. Final schedule against opening hours + meal windows
     calculate_schedule(day, cfg)
 
 
@@ -1362,7 +1389,7 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                     )
 
         place = wp.get("place")
-        dur = wp.get("place").visit_duration_min if place else 60
+        dur = wp.get("duration_min") or (place.visit_duration_min if place else 60)
         # Opening-hour clamping applies to attractions; meals are governed by
         # their meal windows (handled above), not the restaurant's hours.
         if place:
@@ -1576,13 +1603,12 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
         meal_dropped = _drop_bad_meal(day, used_restaurants)
 
         if meal_dropped and len(day.attractions) > 1:
-            # Allow meals to be reconsidered, but DO NOT un-ban the offending restaurant
-            day.dropped_meals.clear()
-
+            # DO NOT clear day.dropped_meals here. Keep the broken meal slot dropped
+            # so the schedule can stabilize with remaining attractions.
             victim = _worst_offender_attraction(day)
             if victim:
                 day.attractions.remove(victim)
-                log.info("Repair: sacrificed attraction '%s' to make time for meals.", victim.name)
+                log.info("Repair: sacrificed attraction '%s' to make time for schedule.", victim.name)
             acted = True
 
         elif meal_dropped:
@@ -1603,6 +1629,7 @@ def deterministic_repair(day: DayPlan, cfg: TripConfig, backups: list[Place], us
             return True
 
     return False
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN ORCHESTRATOR

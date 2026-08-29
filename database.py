@@ -7,12 +7,13 @@ load_dotenv()
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 
-if not MONGODB_URI:
-    raise ValueError("MONGODB_URI is not set in .env")
+client = MongoClient(MONGODB_URI) if MONGODB_URI else None
 
-client = MongoClient(MONGODB_URI)
+db = client["Atlas_Hackathon"] if client else None
 
-db = client["Atlas_Hackathon"]
+itineraries_collection = db["itineraries"] if db else None
+user_collection = db["users"] if db else None
 
-itineraries_collection = db["itineraries"]
-user_collection = db["users"]
+
+def has_mongo() -> bool:
+    return client is not None and itineraries_collection is not None

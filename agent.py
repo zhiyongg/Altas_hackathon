@@ -16,7 +16,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 
 # Import schemas and tools from new modules
-from schemas import ItineraryPlan
+from schemas import ItineraryPlan, PlannerItinerary
 from tools import (
     search_flights_atlas,
     nearby_search,
@@ -25,7 +25,6 @@ from tools import (
     get_hotel_prices,
     search_hotels,
     lookup_destination,
-    PlannerItinerary
 )
 
 # ==========================================

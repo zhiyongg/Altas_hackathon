@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import logging
+import os
 import time
 from typing import Any, Optional
 
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 # Chat and Itinerary imports
 from agent import run_itinerary_agent
 from chat_agent import ChatEngine
+from itinerary_repo import get_latest_itinerary, save_itinerary
 from itineraryPlanner import TripConfig
 
 # Hotel, Tools, and Payment imports
@@ -106,9 +108,16 @@ def _read_json(path: Path = OUTPUT_PATH) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=500, detail="Saved itinerary_output.json is invalid JSON.") from exc
 
-def _save_json(data: dict[str, Any], path: Path = OUTPUT_PATH) -> None:
+def _save_json(data: dict[str, Any], path: Path = OUTPUT_PATH) -> str:
+    """Persist itinerary data to MongoDB when configured; otherwise save to a local JSON file."""
+    if os.getenv("MONGODB_URI"):
+        inserted_id = save_itinerary(data)
+        logger.info("Saved itinerary to MongoDB with id=%s", inserted_id)
+        return inserted_id
+
     with path.open("w", encoding="utf-8") as file:
         json.dump(data, file, indent=2, ensure_ascii=False)
+    return str(path)
 
 def _planner_output(full_output: dict[str, Any]) -> dict[str, Any]:
     """Extract the shape expected by chat_agent from agent.py's full response."""
@@ -121,6 +130,57 @@ def _planner_output(full_output: dict[str, Any]) -> dict[str, Any]:
             detail="Generated output does not contain daily_itinerary.days.",
         )
     return planner_output
+
+
+def _normalize_itinerary_payload(full_output: dict[str, Any], updated_display: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Return the exact same frontend contract for both initial and chat-updated itineraries.
+
+    The internal chat layer stores a reduced planner-style display payload, but the
+    frontend expects the larger ItineraryPlan schema from the original generation.
+    This function preserves the original meta fields and swaps only the
+    daily_itinerary.days content with the latest edited version.
+    """
+    base = dict(full_output or {})
+    current_display = updated_display if isinstance(updated_display, dict) else _planner_output(base)
+
+    normalized = {
+        "trip_overview": base.get("trip_overview") or {
+            "title": "",
+            "origin_city": "",
+            "destination_city": current_display.get("destination") or base.get("destination_city") or "",
+            "start_date": current_display.get("start") or base.get("start_date") or "",
+            "end_date": current_display.get("end") or base.get("end_date") or "",
+            "total_days": max(len(current_display.get("days") or []), 0),
+            "summary": "",
+            "total_estimated_budget": {"amount": 0.0, "currency": "USD"},
+        },
+        "flights": base.get("flights") or [],
+        "hotels": base.get("hotels") or [],
+        "daily_itinerary": {
+            "destination": current_display.get("destination") or base.get("destination_city") or "",
+            "start": current_display.get("start") or base.get("start_date") or "",
+            "end": current_display.get("end") or base.get("end_date") or "",
+            "days": current_display.get("days") or [],
+            "error": None,
+        },
+        "cost_breakdown": base.get("cost_breakdown") or {
+            "flights": 0.0,
+            "hotels": 0.0,
+            "activities": 0.0,
+            "food_dining": 0.0,
+            "transportation": 0.0,
+            "currency": "USD",
+        },
+        "travel_tips": base.get("travel_tips") or [],
+    }
+
+    # Preserve the original field names when they exist and keep the latest edited days.
+    if "daily_itinerary" in base and isinstance(base["daily_itinerary"], dict):
+        normalized["daily_itinerary"].update({
+            key: value for key, value in base["daily_itinerary"].items() if key not in {"destination", "start", "end", "days"}
+        })
+    return normalized
+
 
 def _build_trip_config(
     full_output: dict[str, Any], overrides: Optional[dict[str, Any]] = None
@@ -249,10 +309,11 @@ async def chat(req: ChatRequest):
         full_output = _read_json(path)
         engine = _get_chat_engine(req.session_id, full_output, req.trip_config)
         response = engine.process_message(req.message)
+        normalized_itinerary = _normalize_itinerary_payload(full_output, engine.state.display_itinerary)
         return ChatResponse(
             response=response,
             session_id=req.session_id,
-            itinerary=engine.state.display_itinerary,
+            itinerary=normalized_itinerary,
         )
     except HTTPException:
         raise
@@ -262,6 +323,11 @@ async def chat(req: ChatRequest):
 
 @app.get("/api/saved-itinerary")
 async def saved_itinerary():
+    if os.getenv("MONGODB_URI"):
+        itinerary = get_latest_itinerary()
+        if itinerary is None:
+            raise HTTPException(status_code=404, detail="No saved itinerary found in MongoDB.")
+        return itinerary
     return _read_json()
 
 # ==========================================
