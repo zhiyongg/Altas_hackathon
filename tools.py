@@ -374,7 +374,7 @@ def get_hotel_prices_raw(hotel_id: str, checkin: str, checkout: str, adults: int
         "units": "metric",
         "locale": "en-us",
     }
-    return _stayapi_request(f"/v1/hotel/{hotel_id}/prices", params=query)
+    return _stayapi_request(f"/v1/booking/hotel/prices", params=query)
 
 # ==========================================
 # Hotel / Stay Tools
