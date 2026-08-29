@@ -1,8 +1,9 @@
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from typing import Optional
 from langchain_core.tools import tool
 from schemas import HotelSearchInput
 
@@ -331,9 +332,43 @@ def plan_itinerary(
     return json.dumps(result)
 
 # ==========================================
+# Date Clamping (StayAPI requires check_in >= today)
+# ==========================================
+def _clamp_stay_dates(checkin: str, checkout: str) -> tuple[str, str]:
+    """Ensure checkin >= today and checkout > checkin.
+
+    StayAPI returns HTTP 400 INVALID_DATES when check_in is before today.
+    This can happen when a user opens "Change Accommodation" on a trip
+    whose original dates are now in the past. We clamp checkin to today
+    and preserve the original trip length (or at least 1 night).
+    """
+    today = datetime.now().date()
+    try:
+        ci = datetime.strptime(checkin, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        ci = today
+    try:
+        co = datetime.strptime(checkout, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        co = ci + timedelta(days=1)
+
+    # Preserve original night count when shifting forward
+    original_nights = (co - ci).days
+
+    if ci < today:
+        ci = today
+        co = ci + timedelta(days=max(original_nights, 1))
+
+    if co <= ci:
+        co = ci + timedelta(days=1)
+
+    return ci.strftime("%Y-%m-%d"), co.strftime("%Y-%m-%d")
+
+
+# ==========================================
 # StayAPI Helper
 # ==========================================
-def _stayapi_request(path: str, params: dict | None = None) -> dict:
+def _stayapi_request(path: str, params: Optional[dict] = None) -> dict:
     """Generic GET request to StayAPI. Raises on failure."""
     if not STAYAPI_KEY:
         raise RuntimeError("STAYAPI_KEY environment variable is not set.")
@@ -358,11 +393,13 @@ def search_hotels_raw(params: HotelSearchInput) -> dict:
     actual docs/Postman collection before relying on this in production —
     param names for a given provider can vary.
     """
+    # Clamp dates so StayAPI never receives a past check_in
+    clamped_checkin, clamped_checkout = _clamp_stay_dates(params.checkin, params.checkout)
     query = {
         "dest_id": params.dest_id,
         "dest_type": params.dest_type,
-        "check_in": params.checkin,
-        "check_out": params.checkout,
+        "check_in": clamped_checkin,
+        "check_out": clamped_checkout,
         "adults_number": params.adults,
         "room_number": params.rooms,
         "children_number": params.children,
@@ -385,10 +422,12 @@ def get_hotel_prices_raw(hotel_id: str, checkin: str, checkout: str, adults: int
     NOTE: same caveat as search_hotels_raw — verify param names/path against
     StayAPI's actual docs.
     """
+    # Clamp dates so StayAPI never receives a past check_in
+    clamped_checkin, clamped_checkout = _clamp_stay_dates(checkin, checkout)
     query = {
         "hotel_id": hotel_id,
-        "check_in": checkin,
-        "check_out": checkout,
+        "check_in": clamped_checkin,
+        "check_out": clamped_checkout,
         "adults_number": adults,
         "room_number": rooms,
         "units": "metric",

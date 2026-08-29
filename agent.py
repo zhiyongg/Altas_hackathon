@@ -88,7 +88,7 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
 
         IMPORTANT WORKFLOW:
         1. Search for flights using the flight search tool.
-        2. For hotels: call `lookup_destination` first to get a dest_id, then `search_hotels` with that dest_id,
+        2. For hotels: call `lookup_destination` first to get a numeric dest_id (DO NOT use Google Place IDs starting with 'ChIJ'), then `search_hotels` with that dest_id,
            then `get_hotel_prices` for the specific hotel(s) you want to recommend so selected_room has real pricing.
            When you finalize a hotel choice, keep the exact dest_id and dest_type you used to find it — the final
            output schema needs both stamped onto that hotel (dest_id/dest_type fields) so the frontend can search
@@ -133,8 +133,13 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
         # Pass the full conversation so the parser has access to all flights, hotels, and costs
         extraction_prompt = (
             "Below is the complete conversation including all tool results. "
-            "Extract the overview, flights, hotels, cost breakdown, and travel tips "
-            "into the schema.\n\n"
+            "Extract the full itinerary — every single activity for every day — "
+            "into the schema. Do NOT skip or summarize any activities.\n\n"
+            "CRITICAL: You MUST fully populate the `hotels` and `flights` arrays. "
+            "For each hotel, you MUST include the exact `dest_id` and `dest_type` that you used to search for it, "
+            "so the frontend can search the same destination again. "
+            "WARNING: The `dest_id` MUST be the numeric ID returned by `lookup_destination` (e.g. '-372490'). "
+            "DO NOT use a Google Maps Place ID (e.g. starting with 'ChIJ') as the `dest_id`.\n\n"
             + "\n".join(_content_to_text(m.content) for m in all_messages if hasattr(m, "content") and m.content)
         )
         structured_result = structured_llm.invoke(extraction_prompt)

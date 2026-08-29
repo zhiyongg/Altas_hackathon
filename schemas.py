@@ -248,7 +248,7 @@ class HotelChangeRequest(BaseModel):
     adults: int
     rooms: int
     children: int
-    children_ages: list[int] | None = None
+    children_ages: Optional[list[int]] = None
     # How many of the top (cheapest-first, after sort) searched hotels to
     # backfill with real per-room pricing via get_hotel_prices. Each one is
     # an extra StayAPI call, so keep this small.
