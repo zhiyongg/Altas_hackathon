@@ -1,13 +1,18 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Literal
-from datetime import datetime, timedelta, timezone
 import json
-import math
 import time
 from agent import run_itinerary_agent
 import logging
+from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
+from payment import create_trip_checkout_sessions, get_checkout_session_status
+
+
+from tools import get_hotel_prices_raw
+
+from schemas import HotelSearchInput, HotelChangeRequest, CreateCheckoutSessionsRequest
+from sponsored_hotel import SPONSORED_MOCK_HOTELS
 
 # Configure root logger
 logging.basicConfig(
@@ -16,21 +21,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger(__name__)
-
-# itineraryPlanner raises ValueError at import when API keys are missing from .env;
-# the API server must still start, degrading /api/recalculate-route to haversine
-# estimates only.
-try:
-    from itineraryPlanner import GOOGLE_MAPS_API_KEY, _safe_post, haversine_km, parse_dur
-except Exception as e:
-    GOOGLE_MAPS_API_KEY = None
-    _safe_post = None
-    haversine_km = None
-    parse_dur = None
-    logging.getLogger(__name__).warning(
-        "itineraryPlanner helpers unavailable (%s); "
-        "/api/recalculate-route will return haversine estimates only.", e
-    )
 
 app = FastAPI(title="Itinerary Planner API")
 
@@ -57,147 +47,6 @@ class TripRequest(BaseModel):
     user_request: str
     custom_messages: str = ""
 
-class Waypoint(BaseModel):
-    id: str
-    lat: float
-    lng: float
-
-class RouteRecalcRequest(BaseModel):
-    waypoints: list[Waypoint]
-    mode: str = "TRANSIT"
-
-class RouteLeg(BaseModel):
-    fromId: str
-    toId: str
-    durationMinutes: float
-    distanceMeters: float
-    mode: Literal["walk", "subway", "bus", "taxi"]
-    estimated: bool
-
-class RouteRecalcResponse(BaseModel):
-    legs: list[RouteLeg]
-
-# ── Route recalculation helpers ──────────────────────────────────────────────
-WALK_THRESHOLD_M     = 1200   # straight-line distance under which we route on foot
-WALK_SPEED_M_PER_MIN = 80     # fallback walking speed
-TRANSIT_SPEED_KMH    = 30     # fallback transit speed
-TRANSIT_OVERHEAD_MIN = 10     # fallback wait/transfer overhead
-
-_BUS_VEHICLES = {"BUS", "INTERCITY_BUS", "TROLLEYBUS"}
-
-def _haversine_km_local(a: dict, b: dict) -> float:
-    """Local great-circle distance so the fallback path never depends on itineraryPlanner."""
-    lat1, lon1 = math.radians(a["latitude"]), math.radians(a["longitude"])
-    lat2, lon2 = math.radians(b["latitude"]), math.radians(b["longitude"])
-    dlat, dlon = lat2 - lat1, lon2 - lon1
-    c = 2 * math.asin(math.sqrt(
-        math.sin(dlat / 2) ** 2 +
-        math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2))
-    return 6371 * c
-
-def _straight_meters(a: Waypoint, b: Waypoint) -> float:
-    dist_fn = haversine_km if haversine_km is not None else _haversine_km_local
-    return dist_fn({"latitude": a.lat, "longitude": a.lng},
-                   {"latitude": b.lat, "longitude": b.lng}) * 1000
-
-def _estimated_leg(a: Waypoint, b: Waypoint) -> RouteLeg:
-    """Haversine fallback when the Routes API is unavailable for a pair."""
-    dist = _straight_meters(a, b)
-    if dist <= WALK_THRESHOLD_M:
-        minutes = dist / WALK_SPEED_M_PER_MIN
-        mode = "walk"
-    else:
-        minutes = (dist / 1000) / TRANSIT_SPEED_KMH * 60 + TRANSIT_OVERHEAD_MIN
-        mode = "subway"
-    return RouteLeg(fromId=a.id, toId=b.id,
-                    durationMinutes=round(minutes, 1),
-                    distanceMeters=round(dist),
-                    mode=mode, estimated=True)
-
-def _routed_leg(a: Waypoint, b: Waypoint, travel_mode: str) -> RouteLeg | None:
-    """Single-pair Routes API call (reuses the planner's key + safe POST).
-    Returns None on any failure so the caller can fall back to an estimate."""
-    url = "https://routes.googleapis.com/directions/v2:computeRoutes"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,"
-                            "routes.legs.steps.travelMode,"
-                            "routes.legs.steps.transitDetails.transitLine.vehicle.type",
-    }
-    payload = {
-        "origin":      {"location": {"latLng": {"latitude": a.lat, "longitude": a.lng}}},
-        "destination": {"location": {"latLng": {"latitude": b.lat, "longitude": b.lng}}},
-        "travelMode": travel_mode,
-    }
-    if travel_mode == "TRANSIT":
-        # Same departure-time convention as compute_route_matrix in itineraryPlanner
-        payload["departureTime"] = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT09:00:00Z")
-
-    resp = _safe_post(url, headers=headers, json_payload=payload)
-    if not resp or resp.status_code != 200:
-        logger.warning("computeRoutes failed (%s): %s",
-                       resp.status_code if resp else "no response",
-                       resp.text[:200] if resp else "")
-        return None
-
-    routes = resp.json().get("routes") or []
-    if not routes:
-        return None
-    route = routes[0]
-    duration_s = parse_dur(route.get("duration"))
-    distance_m = route.get("distanceMeters", 0)
-    if duration_s <= 0:
-        return None
-
-    # Map the API result onto the contract's mode enum
-    if travel_mode == "WALK":
-        mode = "walk"
-    elif travel_mode == "DRIVE":
-        mode = "taxi"
-    else:
-        vehicles = {
-            step.get("transitDetails", {}).get("transitLine", {}).get("vehicle", {}).get("type")
-            for leg in route.get("legs", []) for step in leg.get("steps", [])
-            if step.get("transitDetails")
-        }
-        vehicles.discard(None)
-        if not vehicles:
-            mode = "walk"  # transit routing degenerated to a pure walking route
-        elif vehicles <= _BUS_VEHICLES:
-            mode = "bus"
-        else:
-            mode = "subway"
-
-    return RouteLeg(fromId=a.id, toId=b.id,
-                    durationMinutes=round(duration_s / 60, 1),
-                    distanceMeters=distance_m,
-                    mode=mode, estimated=False)
-
-def build_route_legs(req: RouteRecalcRequest) -> list[RouteLeg]:
-    """N-1 adjacent-pair legs; never raises for routing failures."""
-    # Without the planner's key/helpers every leg is a haversine estimate
-    helpers_available = all(x is not None for x in (GOOGLE_MAPS_API_KEY, _safe_post, parse_dur))
-    legs: list[RouteLeg] = []
-    for a, b in zip(req.waypoints, req.waypoints[1:]):
-        travel_mode = "WALK" if _straight_meters(a, b) <= WALK_THRESHOLD_M \
-                      else (req.mode or "TRANSIT").upper()
-        leg = None
-        if helpers_available:
-            try:
-                leg = _routed_leg(a, b, travel_mode)
-            except Exception as e:
-                logger.warning("Route leg %s->%s failed: %s", a.id, b.id, e)
-        legs.append(leg or _estimated_leg(a, b))
-    return legs
-
-@app.post("/api/recalculate-route", response_model=RouteRecalcResponse)
-def recalculate_route(req: RouteRecalcRequest):
-    # Fewer than 2 waypoints is a no-op: respond 200 with an empty legs array
-    if len(req.waypoints) < 2:
-        return RouteRecalcResponse(legs=[])
-    return RouteRecalcResponse(legs=build_route_legs(req))
-
 @app.post("/api/generate")
 async def generate_trip(req: TripRequest):
     logger.info(f"Received request: {req.user_request}")
@@ -214,6 +63,132 @@ async def generate_trip(req: TripRequest):
     except Exception as e:
         logger.error(f"Error generating trip: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/hotel/change")
+async def change_hotel(req: HotelChangeRequest):
+    logger.info(f"Received hotel change request: dest_id={req.dest_id} {req.checkin}->{req.checkout}")
+    try:
+        search_params = HotelSearchInput(
+            dest_id=req.dest_id,
+            dest_type=req.dest_type,
+            checkin=req.checkin,
+            checkout=req.checkout,
+            adults=req.adults,
+            rooms=req.rooms,
+            children=req.children,
+            children_ages=req.children_ages,
+        )
+
+        # Sponsored/featured cards from local mock data (see SPONSORED_MOCK_HOTELS above).
+        sponsored = search_mock_hotels(search_params, SPONSORED_MOCK_HOTELS)
+
+        # Real hotels from StayAPI, shaped into Hotel-schema dicts (not raw JSON, not Hotel objects).
+        searched_cards = get_hotel_ui_cards(search_params)
+
+        # Backfill real room pricing for a capped number of results so we don't
+        # fire off one StayAPI call per hotel on every request.
+        for card in searched_cards[: req.price_lookup_limit]:
+            raw_prices = get_hotel_prices_raw(
+                card["hotel_id"], req.checkin, req.checkout, req.adults, req.rooms
+            )
+            if "error" in raw_prices:
+                continue
+            rooms = _parse_room_options(raw_prices, req.checkin, req.checkout)
+            if not rooms:
+                continue
+            sorted_rooms = sorted(rooms, key=lambda r: r.total_price)
+            card["selected_room"] = sorted_rooms[0].model_dump()
+            card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+
+        # Single flat list — each hotel already carries is_sponsored, so the
+        # frontend splits "Featured" vs "All Options" the same way it did
+        # against the old local stayOptionsList mock.
+        return {"hotels": [h.model_dump() for h in sponsored] + searched_cards}
+
+    except Exception as e:
+        logger.error(f"Error searching hotels: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class HotelPriceLookupRequest(BaseModel):
+    checkin: str
+    checkout: str
+    adults: int
+    rooms: int
+
+
+@app.post("/hotel/{hotel_id}/prices")
+async def get_hotel_price_for_room(hotel_id: str, req: HotelPriceLookupRequest):
+    """On-demand pricing for a single hotel — used by the frontend when a
+    card comes back from /hotel/change without a price (outside the eager
+    backfill's price_lookup_limit)."""
+    card = {"hotel_id": hotel_id}
+    try:
+        found = _backfill_card_price(card, req.checkin, req.checkout, req.adults, req.rooms)
+    except Exception as e:
+        logger.error(f"Error fetching price for hotel {hotel_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not found:
+        raise HTTPException(status_code=404, detail="No room pricing available for this hotel and date range")
+
+    return {"selected_room": card["selected_room"], "available_rooms": card["available_rooms"]}
+
+def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, rooms: int) -> bool:
+    """Fetch real per-room pricing for one hotel card and mutate it in place
+    (selected_room/available_rooms). Returns True if pricing was found.
+    Shared by /hotel/change's eager batch backfill and the on-demand
+    single-hotel endpoint below, so both use identical parsing/sorting."""
+    raw_prices = get_hotel_prices_raw(card["hotel_id"], checkin, checkout, adults, rooms)
+    if "error" in raw_prices:
+        return False
+    parsed_rooms = _parse_room_options(raw_prices, checkin, checkout)
+    if not parsed_rooms:
+        return False
+    sorted_rooms = sorted(parsed_rooms, key=lambda r: r.total_price)
+    card["selected_room"] = sorted_rooms[0].model_dump()
+    card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+    return True
+
+
+class TripMemberInput(BaseModel):
+    id: str
+    name: str
+    isCurrentUser: bool = False
+
+
+@app.post("/payment/create-checkout-sessions")
+async def create_checkout_sessions(req: CreateCheckoutSessionsRequest):
+    logger.info(
+        f"Creating checkout session(s) for trip={req.trip_id} "
+        f"split={req.split} total={req.total_cost} members={len(req.members)}"
+    )
+    try:
+        members = [m.model_dump() for m in req.members]
+        sessions = create_trip_checkout_sessions(
+            trip_id=req.trip_id,
+            trip_destination=req.destination,
+            total_cost=req.total_cost,
+            members=members,
+            split=req.split,
+            success_url=req.success_url,
+            cancel_url=req.cancel_url,
+            currency=req.currency,
+        )
+        return {"sessions": sessions}
+    except Exception as e:
+        logger.error(f"Error creating checkout sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/payment/session-status/{session_id}")
+async def checkout_session_status(session_id: str):
+    try:
+        return get_checkout_session_status(session_id)
+    except Exception as e:
+        logger.error(f"Error retrieving checkout session status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
