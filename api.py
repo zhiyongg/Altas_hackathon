@@ -6,14 +6,13 @@ import time
 from agent import run_itinerary_agent
 import logging
 from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
+from payment import create_trip_checkout_sessions, get_checkout_session_status
+
+
 from tools import get_hotel_prices_raw
 
-from schemas import HotelSearchInput
-
-# TODO: replace with real sponsored/featured hotel data (or a partner feed).
-# search_mock_hotels() needs each dict to carry hotel_id, hotel_name, address,
-# city, coordinates, and a dest_id matching the StayAPI dest_id being searched.
-SPONSORED_MOCK_HOTELS: list[dict] = []
+from schemas import HotelSearchInput, HotelChangeRequest, CreateCheckoutSessionsRequest
+from sponsored_hotel import SPONSORED_MOCK_HOTELS
 
 # Configure root logger
 logging.basicConfig(
@@ -66,21 +65,6 @@ async def generate_trip(req: TripRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class HotelChangeRequest(BaseModel):
-    dest_id: str
-    dest_type: str = "CITY"
-    checkin: str
-    checkout: str
-    adults: int = 2
-    rooms: int = 1
-    children: int = 0
-    children_ages: list[int] | None = None
-    # How many of the top (cheapest-first, after sort) searched hotels to
-    # backfill with real per-room pricing via get_hotel_prices. Each one is
-    # an extra StayAPI call, so keep this small.
-    price_lookup_limit: int = 5
-
-
 @app.post("/hotel/change")
 async def change_hotel(req: HotelChangeRequest):
     logger.info(f"Received hotel change request: dest_id={req.dest_id} {req.checkin}->{req.checkout}")
@@ -124,6 +108,85 @@ async def change_hotel(req: HotelChangeRequest):
 
     except Exception as e:
         logger.error(f"Error searching hotels: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class HotelPriceLookupRequest(BaseModel):
+    checkin: str
+    checkout: str
+    adults: int
+    rooms: int
+
+
+@app.post("/hotel/{hotel_id}/prices")
+async def get_hotel_price_for_room(hotel_id: str, req: HotelPriceLookupRequest):
+    """On-demand pricing for a single hotel — used by the frontend when a
+    card comes back from /hotel/change without a price (outside the eager
+    backfill's price_lookup_limit)."""
+    card = {"hotel_id": hotel_id}
+    try:
+        found = _backfill_card_price(card, req.checkin, req.checkout, req.adults, req.rooms)
+    except Exception as e:
+        logger.error(f"Error fetching price for hotel {hotel_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not found:
+        raise HTTPException(status_code=404, detail="No room pricing available for this hotel and date range")
+
+    return {"selected_room": card["selected_room"], "available_rooms": card["available_rooms"]}
+
+def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, rooms: int) -> bool:
+    """Fetch real per-room pricing for one hotel card and mutate it in place
+    (selected_room/available_rooms). Returns True if pricing was found.
+    Shared by /hotel/change's eager batch backfill and the on-demand
+    single-hotel endpoint below, so both use identical parsing/sorting."""
+    raw_prices = get_hotel_prices_raw(card["hotel_id"], checkin, checkout, adults, rooms)
+    if "error" in raw_prices:
+        return False
+    parsed_rooms = _parse_room_options(raw_prices, checkin, checkout)
+    if not parsed_rooms:
+        return False
+    sorted_rooms = sorted(parsed_rooms, key=lambda r: r.total_price)
+    card["selected_room"] = sorted_rooms[0].model_dump()
+    card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+    return True
+
+
+class TripMemberInput(BaseModel):
+    id: str
+    name: str
+    isCurrentUser: bool = False
+
+
+@app.post("/payment/create-checkout-sessions")
+async def create_checkout_sessions(req: CreateCheckoutSessionsRequest):
+    logger.info(
+        f"Creating checkout session(s) for trip={req.trip_id} "
+        f"split={req.split} total={req.total_cost} members={len(req.members)}"
+    )
+    try:
+        members = [m.model_dump() for m in req.members]
+        sessions = create_trip_checkout_sessions(
+            trip_id=req.trip_id,
+            trip_destination=req.destination,
+            total_cost=req.total_cost,
+            members=members,
+            split=req.split,
+            success_url=req.success_url,
+            cancel_url=req.cancel_url,
+            currency=req.currency,
+        )
+        return {"sessions": sessions}
+    except Exception as e:
+        logger.error(f"Error creating checkout sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/payment/session-status/{session_id}")
+async def checkout_session_status(session_id: str):
+    try:
+        return get_checkout_session_status(session_id)
+    except Exception as e:
+        logger.error(f"Error retrieving checkout session status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

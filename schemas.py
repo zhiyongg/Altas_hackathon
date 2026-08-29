@@ -252,3 +252,22 @@ class HotelChangeRequest(BaseModel):
     # an extra StayAPI call, so keep this small.
     price_lookup_limit: int = 5
 
+
+class TripMemberInput(BaseModel):
+    id: str
+    name: str
+    isCurrentUser: bool = False
+
+class CreateCheckoutSessionsRequest(BaseModel):
+    trip_id: str
+    destination: str
+    total_cost: float
+    members: list[TripMemberInput]
+    split: bool = True
+    currency: str = "usd"
+    # Where the browser lands after paying/cancelling. The frontend should
+    # point these at its own Finalize & Pay page (Stripe appends
+    # ?session_id=... to success_url automatically).
+    success_url: str
+    cancel_url: str
+

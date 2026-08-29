@@ -1,13 +1,14 @@
 import json
 
 from schemas import Hotel, StaySchedule, RoomOption, HotelSearchInput
-from tools import search_hotels_raw
+from tools import search_hotels_raw, get_hotel_prices_raw
+
 
 def _parse_review_and_image(item: dict) -> tuple[float | None, int | None, str | None]:
     """Shared helper: pull guest rating, review count, and a photo URL out of a
     StayAPI/Booking.com-shaped hotel dict, trying the field names StayAPI is
     known to use plus a few common aliases."""
-    rating_raw = item.get("review_score") or item.get("rating") or item.get("reviewScore")
+    rating_raw = item.get("rating") or item.get("review_score") or item.get("reviewScore")
     try:
         rating = round(float(rating_raw), 1) if rating_raw is not None else None
     except (ValueError, TypeError):
@@ -28,6 +29,46 @@ def _parse_review_and_image(item: dict) -> tuple[float | None, int | None, str |
     )
 
     return rating, review_count, image_url
+
+
+def _parse_lead_price(item: dict) -> tuple[float | None, str]:
+    """Pull a lead-in nightly rate straight off a /v1/booking/search result item,
+    if StayAPI supplied one there (it's often null - a real per-hotel price
+    still needs get_hotel_prices/_parse_room_options for room-level detail,
+    but this gives something better than a hardcoded 0.0 when it's available)."""
+    price_raw = item.get("price")
+    currency = "USD"
+    if isinstance(price_raw, dict):
+        amount = price_raw.get("amount") or price_raw.get("value")
+        currency = price_raw.get("currency") or currency
+    else:
+        amount = price_raw
+    try:
+        return (float(amount), currency) if amount is not None else (None, currency)
+    except (ValueError, TypeError):
+        return None, currency
+
+
+def _parse_coords(item: dict) -> tuple[float | None, float | None]:
+    """Pull latitude/longitude off a hotel dict. Real StayAPI /v1/booking/search
+    results put these as top-level fields, not nested — but a few other
+    hotel-shaped sources (mock data, other endpoints) nest them under
+    coordinates/location/geo, so both are checked."""
+    if item.get("latitude") is not None or item.get("longitude") is not None:
+        lat, lon = item.get("latitude"), item.get("longitude")
+    else:
+        nested = item.get("coordinates") or item.get("location") or item.get("geo") or {}
+        lat = nested.get("latitude") or nested.get("lat")
+        lon = nested.get("longitude") or nested.get("lon") or nested.get("lng")
+    try:
+        lat = float(lat) if lat is not None else None
+    except (ValueError, TypeError):
+        lat = None
+    try:
+        lon = float(lon) if lon is not None else None
+    except (ValueError, TypeError):
+        lon = None
+    return lat, lon
 
 
 def search_mock_hotels(
@@ -97,9 +138,7 @@ def search_mock_hotels(
         dest_lat, dest_lon = dest_coords
         within_radius: list[dict] = []
         for h in filtered:
-            coords = h.get("coordinates") or h.get("location") or h.get("geo") or {}
-            lat = coords.get("latitude") or coords.get("lat")
-            lon = coords.get("longitude") or coords.get("lon") or coords.get("lng")
+            lat, lon = _parse_coords(h)
             if lat is not None and lon is not None:
                 try:
                     dist = _haversine_km(dest_lat, dest_lon, float(lat), float(lon))
@@ -127,12 +166,7 @@ def search_mock_hotels(
         if not hotel_id:
             continue
 
-        coords = (
-            item.get("coordinates")
-            or item.get("location")
-            or item.get("geo")
-            or {}
-        )
+        lat, lon = _parse_coords(item)
 
         sr = item.get("star_rating") or item.get("stars") or item.get("class")
         try:
@@ -141,14 +175,15 @@ def search_mock_hotels(
             star_rating = None
 
         rating, review_count, image_url = _parse_review_and_image(item)
+        lead_price, lead_currency = _parse_lead_price(item)
 
         hotels.append(Hotel(
             hotel_id=hotel_id,
             name=str(item.get("hotel_name") or item.get("name") or ""),
             address=item.get("address") or item.get("hotel_address"),
             city=item.get("city") or item.get("city_name"),
-            latitude=coords.get("latitude") or coords.get("lat") or item.get("latitude"),
-            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng") or item.get("longitude"),
+            latitude=lat,
+            longitude=lon,
             star_rating=star_rating,
             rating=rating,
             review_count=review_count,
@@ -161,11 +196,14 @@ def search_mock_hotels(
                 check_out_date=checkout,
                 total_nights=total_nights,
             ),
+            # Uses the search endpoint's own lead-in price if StayAPI gave one;
+            # otherwise stays a 0.0 placeholder until backfill_hotel_rooms runs.
             selected_room=RoomOption(
                 room_name="",
                 max_occupancy=0,
-                price_per_night=0.0,
-                total_price=0.0,
+                price_per_night=lead_price or 0.0,
+                total_price=round((lead_price or 0.0) * total_nights, 2),
+                currency=lead_currency,
             ),
         ))
 
@@ -218,18 +256,39 @@ def backfill_hotel_rooms(
         selected = sorted_rooms[0]
         available = sorted_rooms[1:]
 
-        # BUG FIX: this used to rebuild `Hotel(...)` from scratch and only
-        # copied 7 of the ~13 fields, silently dropping rating, review_count,
-        # image_url, is_sponsored (resets to False -> breaks Featured/All
-        # Options split), dest_id and dest_type (breaks "Change
-        # Accommodation" re-search). model_copy(update=...) keeps every
-        # other field as-is and only touches the two we're actually changing.
-        updated.append(hotel.model_copy(update={
-            "selected_room": selected,
-            "available_rooms": available,
-        }))
+        updated.append(Hotel(
+            hotel_id=hotel.hotel_id,
+            name=hotel.name,
+            address=hotel.address,
+            city=hotel.city,
+            latitude=hotel.latitude,
+            longitude=hotel.longitude,
+            star_rating=hotel.star_rating,
+            stay_schedule=hotel.stay_schedule,
+            selected_room=selected,
+            available_rooms=available,
+        ))
 
     return updated
+
+def _first_float(*values) -> float | None:
+    """Return the first value that parses as a float, trying each in order.
+    Handles StayAPI's currency-formatted strings ("$311", "1,234.50") as well
+    as plain numbers. Returns None if nothing parses (caller decides the
+    fallback - unlike a bare `or` chain, this doesn't treat 0.0 as missing)."""
+    for v in values:
+        if v is None:
+            continue
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            cleaned = v.replace(",", "").replace("$", "").strip()
+            try:
+                return float(cleaned)
+            except ValueError:
+                continue
+    return None
+
 
 def _parse_room_options(raw: dict, checkin: str, checkout: str) -> list[RoomOption]:
     """Parse room data from StayAPI prices response into RoomOption objects.
@@ -266,31 +325,31 @@ def _parse_room_options(raw: dict, checkin: str, checkout: str) -> list[RoomOpti
                      or block.get("block_name") or "Room")
 
         # --- price ---
-        price_raw = (block.get("price") or block.get("price_per_night")
-                     or block.get("nightly_price") or block.get("amount") or 0)
-        if isinstance(price_raw, dict):
-            p = price_raw.get("amount") or price_raw.get("value") or 0
-            cur = price_raw.get("currency") or "USD"
-        else:
-            try:
-                p = float(price_raw)
-            except (ValueError, TypeError):
-                p = 0.0
-            cur = block.get("currency") or "USD"
+        # StayAPI's hotel/prices endpoint gives pre-formatted display strings
+        # ("$311") for price_per_night/total_price, with the actual usable
+        # numbers in separate *_value fields (price_per_night_value: 310.94).
+        # float("$311") throws, so those _value fields must be tried first;
+        # the plain fields are kept as a fallback for other response shapes
+        # that might give bare numbers there instead.
+        nightly = _first_float(
+            block.get("price_per_night_value"),
+            block.get("price_value"),
+            block.get("price_per_night"),
+            block.get("price"),
+            block.get("nightly_price"),
+            block.get("amount"),
+        )
+        if nightly is None:
+            nightly = 0.0
+        cur = block.get("currency") or "USD"
 
-        nightly = float(p)
-
-        # total — prefer explicit total, else nightly * nights
-        total_raw = block.get("total_price") or block.get("total")
-        if total_raw is not None:
-            if isinstance(total_raw, dict):
-                total = float(total_raw.get("amount") or total_raw.get("value") or nightly * nights)
-            else:
-                try:
-                    total = float(total_raw)
-                except (ValueError, TypeError):
-                    total = nightly * nights
-        else:
+        total = _first_float(
+            block.get("total_price_value"),
+            block.get("total_value"),
+            block.get("total_price"),
+            block.get("total"),
+        )
+        if total is None:
             total = nightly * nights
 
         occupancy = (block.get("max_occupancy") or block.get("max_persons")
@@ -298,22 +357,40 @@ def _parse_room_options(raw: dict, checkin: str, checkout: str) -> list[RoomOpti
                      or block.get("max_occupancy_persons") or 2)
 
         # --- breakfast ---
-        breakfast_raw = (block.get("breakfast_included") or block.get("has_breakfast")
-                         or block.get("breakfast") or block.get("meal_plan") or "")
-        if isinstance(breakfast_raw, bool):
-            breakfast = breakfast_raw
-        elif isinstance(breakfast_raw, str):
-            breakfast = "breakfast" in breakfast_raw.lower() and breakfast_raw.lower() not in ("no", "false", "0", "")
+        # breakfast_included/is_refundable are real booleans in StayAPI's
+        # response, and False is a meaningful value here (not "missing") -
+        # `or` chaining treats False as falsy and would incorrectly fall
+        # through to the next field (e.g. a paid-breakfast meal_plan string
+        # that happens to contain the word "breakfast"), so these must be
+        # checked with "is not None" rather than truthiness.
+        if block.get("breakfast_included") is not None:
+            breakfast = bool(block.get("breakfast_included"))
         else:
-            breakfast = bool(breakfast_raw)
+            breakfast_raw = block.get("has_breakfast")
+            if breakfast_raw is None:
+                breakfast_raw = block.get("breakfast")
+            if breakfast_raw is None:
+                breakfast_raw = block.get("meal_plan") or ""
+            if isinstance(breakfast_raw, bool):
+                breakfast = breakfast_raw
+            elif isinstance(breakfast_raw, str):
+                breakfast = "breakfast" in breakfast_raw.lower() and breakfast_raw.lower() not in ("no", "false", "0", "")
+            else:
+                breakfast = bool(breakfast_raw)
 
         # --- refundable ---
-        refund_raw = (block.get("is_refundable") or block.get("refundable")
-                      or block.get("free_cancellation") or False)
-        if isinstance(refund_raw, str):
-            refund = refund_raw.lower() in ("true", "yes", "1", "free")
+        if block.get("is_refundable") is not None:
+            refund = bool(block.get("is_refundable"))
         else:
-            refund = bool(refund_raw)
+            refund_raw = block.get("refundable")
+            if refund_raw is None:
+                refund_raw = block.get("free_cancellation")
+            if refund_raw is None:
+                refund_raw = False
+            if isinstance(refund_raw, str):
+                refund = refund_raw.lower() in ("true", "yes", "1", "free")
+            else:
+                refund = bool(refund_raw)
 
         cancel = (block.get("cancellation_policy") or block.get("cancellation")
                   or block.get("cancel_policy"))
@@ -371,18 +448,16 @@ def extract_hotel_ui_cards(
     if total_nights < 1:
         total_nights = 1
 
-    # BUG FIX: StayAPI actually returns {"data": {"hotels": [...]}} — the old
-    # chain here (`res_data.get("data")`) grabbed the *dict* wrapper, not the
-    # list inside it, so `isinstance(results_list, list)` failed and this
-    # silently returned [] every time, even on a successful search with real
-    # results (confirmed via raw StayAPI response logging). Drill into common
-    # nested keys the same way _parse_room_options already does for prices.
-    results_list = res_data.get("results") or res_data.get("data") or res_data.get("hotels") or []
-    if isinstance(results_list, dict):
-        for key in ("hotels", "results", "hotel_list", "properties", "items"):
-            if key in results_list:
-                results_list = results_list[key]
-                break
+    # Real StayAPI /v1/booking/search shape is {"data": {"hotels": [...]}} -
+    # "data" itself is a dict, not the list, so it must be drilled into before
+    # falling back to other shapes.
+    data_field = res_data.get("data")
+    if isinstance(data_field, dict):
+        results_list = data_field.get("hotels") or []
+    elif isinstance(data_field, list):
+        results_list = data_field
+    else:
+        results_list = res_data.get("results") or res_data.get("hotels") or []
     if not isinstance(results_list, list):
         return []
 
@@ -395,8 +470,7 @@ def extract_hotel_ui_cards(
         if not hotel_id:
             continue
 
-        coords = (item.get("coordinates") or item.get("location")
-                  or item.get("geo") or {})
+        lat, lon = _parse_coords(item)
 
         # Try to parse star_rating as int
         sr = item.get("star_rating") or item.get("stars") or item.get("class")
@@ -406,18 +480,15 @@ def extract_hotel_ui_cards(
             star_rating = None
 
         rating, review_count, image_url = _parse_review_and_image(item)
+        lead_price, lead_currency = _parse_lead_price(item)
 
         hotels.append(Hotel(
             hotel_id=hotel_id,
             name=str(item.get("hotel_name") or item.get("name") or ""),
             address=item.get("address") or item.get("hotel_address"),
             city=item.get("city") or item.get("city_name"),
-            # BUG FIX: this StayAPI response puts latitude/longitude at the
-            # top level of each hotel dict, not nested under coordinates/
-            # location/geo — fall back to the top-level keys so pins aren't
-            # silently None.
-            latitude=coords.get("latitude") or coords.get("lat") or item.get("latitude"),
-            longitude=coords.get("longitude") or coords.get("lon") or coords.get("lng") or item.get("longitude"),
+            latitude=lat,
+            longitude=lon,
             star_rating=star_rating,
             rating=rating,
             review_count=review_count,
@@ -430,11 +501,15 @@ def extract_hotel_ui_cards(
                 check_out_date=checkout,
                 total_nights=total_nights,
             ),
+            # Uses the search endpoint's own lead-in price if StayAPI gave one
+            # (often null there); get_hotel_ui_cards's caller (api.py) backfills
+            # this with real per-room data from get_hotel_prices afterwards.
             selected_room=RoomOption(
                 room_name="",
                 max_occupancy=0,
-                price_per_night=0.0,
-                total_price=0.0,
+                price_per_night=lead_price or 0.0,
+                total_price=round((lead_price or 0.0) * total_nights, 2),
+                currency=lead_currency,
             ),
             available_rooms=[],
         ))
@@ -455,3 +530,20 @@ def get_hotel_ui_cards(params: HotelSearchInput) -> list[dict]:
         return []
     hotels = extract_hotel_ui_cards(raw, params.checkin, params.checkout, str(params.dest_id), params.dest_type)
     return [h.model_dump() for h in hotels]
+
+def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, rooms: int) -> bool:
+    """Fetch real per-room pricing for one hotel card and mutate it in place
+    (selected_room/available_rooms). Returns True if pricing was found.
+    Shared by /hotel/change's eager batch backfill and the on-demand
+    single-hotel endpoint below, so both use identical parsing/sorting."""
+    raw_prices = get_hotel_prices_raw(card["hotel_id"], checkin, checkout, adults, rooms)
+    if "error" in raw_prices:
+        return False
+    parsed_rooms = _parse_room_options(raw_prices, checkin, checkout)
+    if not parsed_rooms:
+        return False
+    sorted_rooms = sorted(parsed_rooms, key=lambda r: r.total_price)
+    card["selected_room"] = sorted_rooms[0].model_dump()
+    card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+    return True
+
