@@ -564,13 +564,14 @@ def get_meal_slots(dp: DayPlan) -> list[tuple]:
     if start_t <= dtime(12, 30) and end_t >= dtime(13, 30):
         slots.append(("lunch", l_time, "attraction"))
 
-    # 3. Dinner: Force included on normal days or if day extends past 18:00
-    if end_t >= dtime(18, 0) or dp.day_type == "normal":
+    # 3. Dinner: Force included on normal days or if day extends past 19:30
+    # ── FIX: Changed from 18:00 to 19:30 to prevent impossible overlapping on departure days ──
+    if end_t >= dtime(19, 30) or dp.day_type == "normal":
         context = "hotel" if dp.day_type == "arrival" else "attraction"
         slots.append(("dinner", d_time, context))
 
     return slots
-
+    
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STAGE 2 — CANDIDATE DISCOVERY
@@ -1201,13 +1202,14 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
                 if entry > hi:
                     penalty += 1e7  # Missed window
                 
-                # 3. MEAL GRAVITY: Force optimizer to eat if inside the window
-                if wp.get("kind") == "meal" and lo <= entry <= hi:
-                    time_left = (hi - entry).total_seconds()
+                # 3. MEAL GRAVITY: Force optimizer to eat if naturally inside the window
+                # ── FIX: Use 'arrival' instead of 'entry' so it doesn't pull meals from the future ──
+                if wp.get("kind") == "meal" and lo <= arrival <= hi:
+                    time_left = (hi - arrival).total_seconds()
                     if time_left < 7200: # Less than 2 hours left -> Extreme Priority
                         penalty -= 1e6 
                     else: # Inside window -> High Priority
-                        penalty -= 50000 
+                        penalty -= 50000
 
             cost = (entry - cur_time).total_seconds() + penalty
             if cost < best_cost:
@@ -1279,6 +1281,7 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
     has_explicit_checkin = False
 
     if day.day_type == "arrival":
+        end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
         if day.start_time >= check_in_dt:
             start_name = f"Arrive & Check-in ({cfg.hotel.get('name', '')})"
             start_duration = 45 
@@ -1287,25 +1290,32 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
             start_name = f"Arrive & Drop Luggage ({cfg.hotel.get('name', '')})"
             start_duration = 15
     elif day.day_type == "departure":
-        start_name = f"Check-out & Leave Bags ({cfg.hotel.get('name', '')})"
+        start_name = f"Leave Hotel & Drop Bags ({cfg.hotel.get('name', '')})"
+        end_name = "Pick Up Bags & Depart for Airport"
     else:
         start_name = f"Leave Hotel ({cfg.hotel.get('name', '')})"
+        end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel", "duration_min": start_duration}]
     
     for p in day.attractions:
-        waypoints.append({"name": p.name, "location": dict(p.location),
-                          "kind": "attraction", "place": p})
+        waypoints.append({"name": p.name, "location": dict(p.location), "kind": "attraction", "place": p})
 
-    # Only append a separate mid-day check-in if we haven't already checked in at the start
-    if day.day_type == "arrival" and not has_explicit_checkin and day.start_time < check_in_dt < day.end_time:
-        waypoints.append({
-            "name": f"Hotel Check-in ({cfg.hotel.get('name', '')})",
-            "location": dict(cfg.hotel),
-            "kind": "hotel_checkin",
-            "duration_min": 45,
-            "place": None
-        })
+    # Handle mid-day check-in or evening check-in fallback
+    if day.day_type == "arrival" and not has_explicit_checkin:
+        if day.start_time < check_in_dt < day.end_time:
+            waypoints.append({
+                "name": f"Hotel Check-in ({cfg.hotel.get('name', '')})",
+                "location": dict(cfg.hotel),
+                "kind": "hotel_checkin",
+                "duration_min": 45,
+                "place": None
+            })
+            has_explicit_checkin = True
+        
+        # If no mid-day check-in was added, force the final node to reflect the check-in
+        if not has_explicit_checkin:
+            end_name = f"Return & Check-in to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints.extend(meal_waypoints)
     waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
@@ -1388,9 +1398,19 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                     log.warning("%s scheduled at %s, outside meal window %s-%s", wp["name"], fmt_time(arrival), fmt_time(window_start), fmt_time(window_end))
 
         place = wp.get("place")
-        # Ensure hotel check-in duration is mapped correctly from the waypoint
         dur = wp.get("duration_min") if wp.get("duration_min") is not None else (place.visit_duration_min if place else 60)
         
+        # ── FIX: DYNAMIC TIME COMPRESSION (ATTRACTIONS ONLY) ──
+        if wp["kind"] == "attraction":
+            # Calculate time left in day (reserving 30 mins for the drive home)
+            time_left_in_day = (day.end_time - arrival).total_seconds() / 60.0 - 30
+            
+            if dur > time_left_in_day:
+                if time_left_in_day < 20:
+                    dur = 0 # Too late to visit. Set to 0 so validation catches and deletes it.
+                else:
+                    dur = int(time_left_in_day) # Compress the visit to fit perfectly
+
         if place:
             win = get_opening_window(place, day.date)
             if win:
@@ -1402,7 +1422,8 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                 if arrival >= close_dt:
                     dur = 0
                 elif arrival + timedelta(minutes=dur) > close_dt:
-                    dur = max(int((close_dt - arrival).total_seconds() / 60), 0)
+                    # Compress the visit to fit before closing time (min 30 mins) instead of 0
+                    dur = max(int((close_dt - arrival).total_seconds() / 60), 30)
 
         depart = arrival + timedelta(minutes=dur)
         
