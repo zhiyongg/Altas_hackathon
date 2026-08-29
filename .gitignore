@@ -1,4 +1,4 @@
 .env
 .venv
-.gitignore
+.pyc
 __pycache__
