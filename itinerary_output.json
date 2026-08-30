@@ -1,58 +1,38 @@
 {
   "trip_overview": {
-    "title": "Kuala Lumpur Shopping Getaway",
-    "origin_city": "SIN",
-    "destination_city": "KUL",
-    "start_date": "2026-09-08",
-    "end_date": "2026-09-09",
+    "title": "Kuala Lumpur Foodie Escape",
+    "origin_city": "Not Specified",
+    "destination_city": "Kuala Lumpur",
+    "start_date": "2026-08-20",
+    "end_date": "2026-08-21",
     "total_days": 2,
-    "summary": "A short, shopping-focused trip to Kuala Lumpur featuring iconic malls and local markets.",
+    "summary": "A food-focused 2-day trip to Kuala Lumpur featuring iconic landmarks and local culinary gems.",
     "total_estimated_budget": {
-      "amount": 700.0,
+      "amount": 1200.0,
       "currency": "USD"
     }
   },
-  "flights": [
-    {
-      "direction": "outbound",
-      "routing_id": "U0lOX0tVTF8xXzIwMjYwOTA4X18yXzBfMHxRUFUxOTk5Nl9hcGlfMXwxfDQ0Ljg5XzQ0Ljg5XzE5LjkwXzAuMDBfMTA5LjY4X1VTRHxTSU5fS1VMXzFfMjAyNjA5MDhfXzJfMF8wXlNJTi1BSzcwMC0tS1VMLTIwMjYwOTA4MDc1NS0yMDI2MDkwODA5MDAtQ2hlYXBlc3QtMS1eNDQuODlfNDQuODlfMTkuOTBfMC4wMF8xMDkuNjheQUFLQVBJX0FBS0IyQ15eQUFLQjJDMVNJTktVTDIwMDIwMjYwOTA4XlNHRF41Ni45OV41Ni45OV4yNS4yN14xfDB8MjAyNjA4MzAwNDExMTV8MHwxNzg4MDM0Mjc1NjEwM2Q2ZTYzNjJ8fHx8fDAuMDB8M3wwfHxub3JtYWx8ZmFsc2V8MjAyNi0wOC0yOSAwOTo1NDowMnw=.Aw6omH3zyIe5OjeZrSptEWjRI2X7XA7sC7CGMFbs7/Q=",
-      "carrier": "AirAsia",
-      "flight_number": "AK700",
-      "cabin": "Economy",
-      "fare_family": "Cheapest",
-      "dep_airport": "SIN",
-      "dep_time": "07:55",
-      "arr_airport": "KUL",
-      "arr_time": "09:00",
-      "duration_minutes": 65,
-      "price": {
-        "adult_price": 44.89,
-        "adult_tax": 19.9,
-        "total": 64.79,
-        "currency": "USD"
-      }
-    }
-  ],
+  "flights": [],
   "hotels": [
     {
-      "hotel_id": "mandarin_oriental_kl",
-      "name": "Mandarin Oriental, Kuala Lumpur",
-      "address": "Kuala Lumpur City Centre, 50088 Kuala Lumpur",
+      "hotel_id": "ritz-carlton-kl",
+      "name": "The Ritz-Carlton, Kuala Lumpur",
+      "address": "168, Jalan Imbi, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia",
       "city": "Kuala Lumpur",
-      "latitude": 3.1572,
-      "longitude": 101.7122,
+      "latitude": 3.1434,
+      "longitude": 101.7051,
       "star_rating": 5,
-      "rating": null,
-      "review_count": null,
+      "rating": 4.6,
+      "review_count": 2500,
       "image_url": null,
       "is_sponsored": false,
-      "dest_id": "-372490",
+      "dest_id": "-2401866",
       "dest_type": "CITY",
       "stay_schedule": {
-        "check_in_date": "2026-09-08",
+        "check_in_date": "2026-08-20",
         "check_in_time": "15:00",
-        "check_out_date": "2026-09-09",
-        "check_out_time": "11:00",
+        "check_out_date": "2026-08-21",
+        "check_out_time": "12:00",
         "total_nights": 1
       },
       "selected_room": {
@@ -70,69 +50,63 @@
   ],
   "daily_itinerary": {
     "destination": "Kuala Lumpur",
-    "start": "2026-09-08",
-    "end": "2026-09-09",
+    "start": "2026-08-20",
+    "end": "2026-08-21",
     "days": [
       {
         "day": 0,
-        "date": "2026-09-08",
+        "date": "2026-08-20",
         "type": "arrival",
         "valid": true,
         "schedule": [
           {
-            "time": "10:00",
-            "name": "Arrive & Drop Luggage (Mandarin Oriental, Kuala Lumpur)",
+            "time": "12:00",
+            "name": "Arrive & Drop Luggage (The Ritz-Carlton, Kuala Lumpur)",
             "kind": "hotel",
             "duration_min": 15,
-            "travel_time_min": 0,
             "location": {
-              "latitude": 3.1572,
-              "longitude": 101.7122,
-              "name": "Mandarin Oriental, Kuala Lumpur",
-              "address": "Kuala Lumpur City Centre, 50088 Kuala Lumpur"
+              "latitude": 3.1434,
+              "longitude": 101.7051,
+              "name": "The Ritz-Carlton, Kuala Lumpur",
+              "address": ""
             },
             "rating": null,
             "price_level": null,
             "opening_hours": [],
             "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 0 mins ---> Suria KLCC"
+              "mode": "drive",
+              "description": "Drive --- 11 mins ---> Lunch: Menara Kuala Lumpur"
             }
           },
           {
-            "time": "10:15",
-            "name": "Suria KLCC",
-            "kind": "attraction",
-            "duration_min": 120,
-            "travel_time_min": 0,
-            "location": {
-              "latitude": 3.1572757,
-              "longitude": 101.7122335,
-              "name": "Suria KLCC",
-              "address": "Lot No. 241, Level 2Menara, Menara Berkembar Petronas, Kuala Lumpur City Centre, 50088 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
-            },
-            "rating": 4.6,
-            "price_level": "",
-            "opening_hours": [
-              "Monday: 10:00 AM – 10:00 PM",
-              "Tuesday: 10:00 AM – 10:00 PM",
-              "Wednesday: 10:00 AM – 10:00 PM",
-              "Thursday: 10:00 AM – 10:00 PM",
-              "Friday: 10:00 AM – 10:00 PM",
-              "Saturday: 10:00 AM – 10:00 PM",
-              "Sunday: 10:00 AM – 10:00 PM"
-            ],
-            "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 36 mins ---> Lunch: Menara Kuala Lumpur"
-            }
-          },
-          {
-            "time": "12:51",
+            "time": "12:26",
             "name": "Lunch: Menara Kuala Lumpur",
             "kind": "meal",
             "duration_min": 60,
-            "travel_time_min": 37,
+            "location": {
+              "latitude": 3.1528761999999997,
+              "longitude": 101.7038516,
+              "name": "Menara Kuala Lumpur",
+              "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.5,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: 9:00 AM – 10:00 PM",
+              "Tuesday: 9:00 AM – 10:00 PM",
+              "Wednesday: 9:00 AM – 10:00 PM",
+              "Thursday: 9:00 AM – 10:00 PM",
+              "Friday: 9:00 AM – 10:00 PM",
+              "Saturday: 9:00 AM – 10:00 PM",
+              "Sunday: 9:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": null
+          },
+          {
+            "time": "13:26",
+            "name": "Menara Kuala Lumpur",
+            "kind": "attraction",
+            "duration_min": 120,
             "location": {
               "latitude": 3.1528761999999997,
               "longitude": 101.7038516,
@@ -151,24 +125,229 @@
               "Sunday: 9:00 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 32 mins ---> Central Market"
+              "mode": "drive",
+              "description": "Drive --- 10 mins ---> Petaling Street Market"
             }
           },
           {
-            "time": "14:24",
-            "name": "Central Market",
+            "time": "15:36",
+            "name": "Petaling Street Market",
             "kind": "attraction",
             "duration_min": 120,
-            "travel_time_min": 33,
             "location": {
-              "latitude": 3.1452635000000004,
-              "longitude": 101.69541579999999,
-              "name": "Central Market",
-              "address": "Kuala Lumpur City Centre, 50050 Kuala Lumpur, Federal Territory of Kuala Lumpur, Malaysia"
+              "latitude": 3.1443950999999997,
+              "longitude": 101.69764959999999,
+              "name": "Petaling Street Market",
+              "address": "Jalan Petaling, City Centre, 50000 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
-            "rating": 4.3,
+            "rating": 4.1,
             "price_level": "",
+            "opening_hours": [
+              "Monday: 8:00 AM – 10:00 PM",
+              "Tuesday: 10:00 AM – 10:00 PM",
+              "Wednesday: 8:00 AM – 10:00 PM",
+              "Thursday: 10:00 AM – 10:00 PM",
+              "Friday: 10:00 AM – 10:00 PM",
+              "Saturday: 10:00 AM – 10:00 PM",
+              "Sunday: 10:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 6 mins ---> Hotel Check-in (The Ritz-Carlton, Kuala Lumpur)"
+            }
+          },
+          {
+            "time": "17:42",
+            "name": "Hotel Check-in (The Ritz-Carlton, Kuala Lumpur)",
+            "kind": "hotel_checkin",
+            "duration_min": 45,
+            "location": {
+              "latitude": 3.1434,
+              "longitude": 101.7051,
+              "name": "The Ritz-Carlton, Kuala Lumpur",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 9 mins ---> Dinner: Restoran Mon Chinese Beef Roti"
+            }
+          },
+          {
+            "time": "18:37",
+            "name": "Dinner: Restoran Mon Chinese Beef Roti",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.145917,
+              "longitude": 101.709969,
+              "name": "Restoran Mon Chinese Beef Roti",
+              "address": "82, Jln Bukit Bintang, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.4,
+            "price_level": "PRICE_LEVEL_INEXPENSIVE",
+            "opening_hours": [
+              "Monday: 7:00 AM – 12:00 AM",
+              "Tuesday: 7:00 AM – 12:00 AM",
+              "Wednesday: 7:00 AM – 12:00 AM",
+              "Thursday: 7:00 AM – 12:00 AM",
+              "Friday: 7:00 AM – 12:00 AM",
+              "Saturday: 7:00 AM – 12:00 AM",
+              "Sunday: 7:00 AM – 12:00 AM"
+            ],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 4 mins ---> Return to Hotel (The Ritz-Carlton, Kuala Lumpur)"
+            }
+          },
+          {
+            "time": "19:42",
+            "name": "Return to Hotel (The Ritz-Carlton, Kuala Lumpur)",
+            "kind": "hotel",
+            "duration_min": 0,
+            "location": {
+              "latitude": 3.1434,
+              "longitude": 101.7051,
+              "name": "The Ritz-Carlton, Kuala Lumpur",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": null
+          }
+        ],
+        "attractions": [
+          "Menara Kuala Lumpur",
+          "Petaling Street Market"
+        ],
+        "meals": {
+          "breakfast": null,
+          "lunch": "Menara Kuala Lumpur",
+          "dinner": "Restoran Mon Chinese Beef Roti"
+        }
+      },
+      {
+        "day": 1,
+        "date": "2026-08-21",
+        "type": "departure",
+        "valid": true,
+        "schedule": [
+          {
+            "time": "08:00",
+            "name": "Travel from The Ritz-Carlton, Kuala Lumpur",
+            "kind": "hotel",
+            "duration_min": 0,
+            "location": {
+              "latitude": 3.1434,
+              "longitude": 101.7051,
+              "name": "The Ritz-Carlton, Kuala Lumpur",
+              "address": ""
+            },
+            "rating": null,
+            "price_level": null,
+            "opening_hours": [],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 12 mins ---> Breakfast: KLCG Confectionery & Bakery, Medan Pasar"
+            }
+          },
+          {
+            "time": "08:12",
+            "name": "Breakfast: KLCG Confectionery & Bakery, Medan Pasar",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.147032,
+              "longitude": 101.6956527,
+              "name": "KLCG Confectionery & Bakery, Medan Pasar",
+              "address": "2, Medan Pasar, City Centre, 50050 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.9,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "opening_hours": [
+              "Monday: 8:00 AM – 8:00 PM",
+              "Tuesday: 8:00 AM – 8:00 PM",
+              "Wednesday: 8:00 AM – 8:00 PM",
+              "Thursday: 8:00 AM – 8:00 PM",
+              "Friday: 8:00 AM – 8:00 PM",
+              "Saturday: 8:00 AM – 8:00 PM",
+              "Sunday: 8:00 AM – 8:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 13 mins ---> Petronas Twin Towers"
+            }
+          },
+          {
+            "time": "09:26",
+            "name": "Petronas Twin Towers",
+            "kind": "attraction",
+            "duration_min": 120,
+            "location": {
+              "latitude": 3.1574693,
+              "longitude": 101.7115639,
+              "name": "Petronas Twin Towers",
+              "address": "Lower Ground (Concourse) Level, Menara Berkembar Petronas, Kuala Lumpur City Centre, 50088 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.7,
+            "price_level": "",
+            "opening_hours": [
+              "Monday: Closed",
+              "Tuesday: 9:00 AM – 9:00 PM",
+              "Wednesday: 9:00 AM – 9:00 PM",
+              "Thursday: 9:00 AM – 9:00 PM",
+              "Friday: 9:00 AM – 9:00 PM",
+              "Saturday: 9:00 AM – 9:00 PM",
+              "Sunday: 9:00 AM – 9:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 14 mins ---> Lunch: Locarasa Restaurant & Patisserie"
+            }
+          },
+          {
+            "time": "11:42",
+            "name": "Lunch: Locarasa Restaurant & Patisserie",
+            "kind": "meal",
+            "duration_min": 60,
+            "location": {
+              "latitude": 3.1933659999999997,
+              "longitude": 101.6736234,
+              "name": "Locarasa Restaurant & Patisserie",
+              "address": "Lot P02-2, Bamboo Hills Taman Bukit Bambu, Off, Lebuhraya Duta - Ulu Kelang, Taman Bamboo, 51200 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.7,
+            "price_level": "PRICE_LEVEL_MODERATE",
+            "opening_hours": [
+              "Monday: 9:00 AM – 10:00 PM",
+              "Tuesday: 9:00 AM – 10:00 PM",
+              "Wednesday: 9:00 AM – 10:00 PM",
+              "Thursday: 9:00 AM – 10:00 PM",
+              "Friday: 9:00 AM – 10:30 PM",
+              "Saturday: 9:00 AM – 10:30 PM",
+              "Sunday: 9:00 AM – 10:00 PM"
+            ],
+            "transit_to_next": {
+              "mode": "drive",
+              "description": "Drive --- 2 mins ---> Bamboo Hills"
+            }
+          },
+          {
+            "time": "12:45",
+            "name": "Bamboo Hills",
+            "kind": "attraction",
+            "duration_min": 105,
+            "location": {
+              "latitude": 3.1936310999999997,
+              "longitude": 101.67393650000001,
+              "name": "Bamboo Hills",
+              "address": "Off, Lebuhraya Duta - Ulu Kelang, Taman Bamboo, 51200 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+            },
+            "rating": 4.4,
+            "price_level": "PRICE_LEVEL_MODERATE",
             "opening_hours": [
               "Monday: 10:00 AM – 10:00 PM",
               "Tuesday: 10:00 AM – 10:00 PM",
@@ -179,69 +358,20 @@
               "Sunday: 10:00 AM – 10:00 PM"
             ],
             "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 23 mins ---> Hotel Check-in (Mandarin Oriental, Kuala Lumpur)"
+              "mode": "drive",
+              "description": "Drive --- 15 mins ---> Depart for Airport"
             }
           },
           {
-            "time": "16:47",
-            "name": "Hotel Check-in (Mandarin Oriental, Kuala Lumpur)",
-            "kind": "hotel_checkin",
-            "duration_min": 45,
-            "travel_time_min": 23,
-            "location": {
-              "latitude": 3.1572,
-              "longitude": 101.7122,
-              "name": "Mandarin Oriental, Kuala Lumpur",
-              "address": "Kuala Lumpur City Centre, 50088 Kuala Lumpur"
-            },
-            "rating": null,
-            "price_level": null,
-            "opening_hours": [],
-            "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 32 mins ---> Dinner: TG's Bistro"
-            }
-          },
-          {
-            "time": "18:30",
-            "name": "Dinner: TG's Bistro",
-            "kind": "meal",
-            "duration_min": 60,
-            "travel_time_min": 33,
-            "location": {
-              "latitude": 3.1456302,
-              "longitude": 101.70691989999999,
-              "name": "TG's Bistro",
-              "address": "Tgs Bistro, 8, Tengkat Tong Shin, Bukit Bintang, 50200 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
-            },
-            "rating": 4.3,
-            "price_level": "PRICE_LEVEL_INEXPENSIVE",
-            "opening_hours": [
-              "Monday: Open 24 hours",
-              "Tuesday: Open 24 hours",
-              "Wednesday: Open 24 hours",
-              "Thursday: Open 24 hours",
-              "Friday: Open 24 hours",
-              "Saturday: Open 24 hours",
-              "Sunday: Open 24 hours"
-            ],
-            "transit_to_next": {
-              "mode": "transit",
-              "description": "Transit --- 32 mins ---> Return to Hotel (Mandarin Oriental, Kuala Lumpur)"
-            }
-          },
-          {
-            "time": "20:02",
-            "name": "Return to Hotel (Mandarin Oriental, Kuala Lumpur)",
+            "time": "14:45",
+            "name": "Depart for Airport",
             "kind": "hotel",
             "duration_min": 0,
-            "travel_time_min": 32,
             "location": {
-              "latitude": 3.1572,
-              "longitude": 101.7122,
-              "name": "Mandarin Oriental, Kuala Lumpur",
-              "address": "Kuala Lumpur City Centre, 50088 Kuala Lumpur"
+              "latitude": 3.1434,
+              "longitude": 101.7051,
+              "name": "The Ritz-Carlton, Kuala Lumpur",
+              "address": ""
             },
             "rating": null,
             "price_level": null,
@@ -250,87 +380,12 @@
           }
         ],
         "attractions": [
-          "Suria KLCC",
-          "Central Market"
+          "Petronas Twin Towers",
+          "Bamboo Hills"
         ],
         "meals": {
-          "lunch": "Menara Kuala Lumpur",
-          "dinner": "TG's Bistro"
-        }
-      },
-      {
-        "day": 1,
-        "date": "2026-09-09",
-        "type": "departure",
-        "valid": false,
-        "schedule": [
-          {
-            "time": "08:00",
-            "name": "Leave Hotel & Drop Bags (Mandarin Oriental, Kuala Lumpur)",
-            "kind": "hotel",
-            "duration_min": 0,
-            "location": {
-              "latitude": 3.1572,
-              "longitude": 101.7122,
-              "name": "Mandarin Oriental, Kuala Lumpur",
-              "address": ""
-            },
-            "rating": null,
-            "price_level": null,
-            "opening_hours": [],
-            "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 6 mins ---> Breakfast: After One KL"
-            }
-          },
-          {
-            "time": "08:06",
-            "name": "Breakfast: After One KL",
-            "kind": "meal",
-            "duration_min": 60,
-            "location": {
-              "latitude": 3.1618489,
-              "longitude": 101.7134669,
-              "name": "After One KL",
-              "address": "Wilayah Persekutuan, 1, Jalan Yap Kwan Seng, Kampung Baru, 50450 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
-            },
-            "rating": 4.6,
-            "price_level": "PRICE_LEVEL_MODERATE",
-            "opening_hours": [
-              "Monday: 8:00 AM – 4:00 PM",
-              "Tuesday: 8:00 AM – 8:45 PM",
-              "Wednesday: 8:00 AM – 8:45 PM",
-              "Thursday: 8:00 AM – 8:45 PM",
-              "Friday: 8:00 AM – 8:45 PM",
-              "Saturday: 8:00 AM – 8:45 PM",
-              "Sunday: 8:00 AM – 8:45 PM"
-            ],
-            "transit_to_next": {
-              "mode": "drive",
-              "description": "Drive --- 6 mins ---> Pick Up Bags & Depart for Airport"
-            }
-          },
-          {
-            "time": "09:12",
-            "name": "Pick Up Bags & Depart for Airport",
-            "kind": "hotel",
-            "duration_min": 0,
-            "location": {
-              "latitude": 3.1572,
-              "longitude": 101.7122,
-              "name": "Mandarin Oriental, Kuala Lumpur",
-              "address": ""
-            },
-            "rating": null,
-            "price_level": null,
-            "opening_hours": [],
-            "transit_to_next": null
-          }
-        ],
-        "attractions": [],
-        "meals": {
-          "breakfast": "After One KL",
-          "lunch": null,
+          "breakfast": "KLCG Confectionery & Bakery, Medan Pasar",
+          "lunch": "Locarasa Restaurant & Patisserie",
           "dinner": null
         }
       }
@@ -338,17 +393,17 @@
     "error": null
   },
   "cost_breakdown": {
-    "flights": 130.0,
+    "flights": 0.0,
     "hotels": 250.0,
-    "activities": 100.0,
-    "food_dining": 150.0,
-    "transportation": 70.0,
+    "activities": 150.0,
+    "food_dining": 300.0,
+    "transportation": 100.0,
     "currency": "USD"
   },
   "travel_tips": [
+    "Book flights in advance as they are not included in this estimate.",
     "Use Grab for convenient and affordable transportation around Kuala Lumpur.",
-    "Suria KLCC is best accessed via the KLCC LRT station.",
-    "Carry a light jacket as shopping malls are heavily air-conditioned.",
-    "Visit the Petronas Twin Towers observation deck early to avoid crowds."
+    "Try the local street food at Petaling Street for an authentic experience.",
+    "Ensure you have a universal travel adapter for Malaysia's Type G power outlets."
   ]
 }

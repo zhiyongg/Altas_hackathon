@@ -1240,7 +1240,7 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
 
     # ── REPLACE FROM HERE ──
     if day.day_type == "departure":
-        end_name = f"Pick Up Bags & Depart for Airport"
+        end_name = "Depart for Airport"
     else:
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
 
@@ -1284,14 +1284,14 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
         if day.start_time >= check_in_dt:
             start_name = f"Arrive & Check-in ({cfg.hotel.get('name', '')})"
-            start_duration = 45 
+            start_duration = 45
             has_explicit_checkin = True
         else:
             start_name = f"Arrive & Drop Luggage ({cfg.hotel.get('name', '')})"
             start_duration = 15
     elif day.day_type == "departure":
-        start_name = f"Leave Hotel & Drop Bags ({cfg.hotel.get('name', '')})"
-        end_name = "Pick Up Bags & Depart for Airport"
+        start_name = f"Travel from {cfg.hotel.get('name', '')}"
+        end_name = "Depart for Airport"
     else:
         start_name = f"Leave Hotel ({cfg.hotel.get('name', '')})"
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
