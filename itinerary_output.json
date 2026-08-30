@@ -8,7 +8,7 @@
     "total_days": 3,
     "summary": "A 3-day food and shopping focused trip to Kuala Lumpur, featuring iconic landmarks and local culinary gems.",
     "total_estimated_budget": {
-      "amount": 700.0,
+      "amount": 1200.0,
       "currency": "USD"
     }
   },
@@ -65,7 +65,7 @@
       "review_count": 500,
       "image_url": null,
       "is_sponsored": false,
-      "dest_id": "-372490",
+      "dest_id": "-2401866",
       "dest_type": "CITY",
       "stay_schedule": {
         "check_in_date": "2026-09-24",
@@ -127,7 +127,12 @@
               "longitude": 101.7038516,
               "name": "Menara Kuala Lumpur",
               "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.1528761999999997,
+              "longitude": 101.7038516,
+              "name": "Menara Kuala Lumpur",
+              "address": "2 Jalan Punchak, Off, Jalan P. Ramlee, Kuala Lumpur, 50250 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
+            "rating": 4.5,
             "rating": 4.5,
             "price_level": "",
             "opening_hours": [
@@ -138,7 +143,15 @@
               "Friday: 9:00 AM – 10:00 PM",
               "Saturday: 9:00 AM – 10:00 PM",
               "Sunday: 9:00 AM – 10:00 PM"
+              "Monday: 9:00 AM – 10:00 PM",
+              "Tuesday: 9:00 AM – 10:00 PM",
+              "Wednesday: 9:00 AM – 10:00 PM",
+              "Thursday: 9:00 AM – 10:00 PM",
+              "Friday: 9:00 AM – 10:00 PM",
+              "Saturday: 9:00 AM – 10:00 PM",
+              "Sunday: 9:00 AM – 10:00 PM"
             ],
+            "transit_to_next": null
             "transit_to_next": null
           },
           {
@@ -360,17 +373,17 @@
             "kind": "attraction",
             "duration_min": 120,
             "location": {
-              "latitude": 3.1452635000000004,
-              "longitude": 101.69541579999999,
-              "name": "Central Market",
-              "address": "Kuala Lumpur City Centre, 50050 Kuala Lumpur, Federal Territory of Kuala Lumpur, Malaysia"
+              "latitude": 3.1443950999999997,
+              "longitude": 101.69764959999999,
+              "name": "Petaling Street Market",
+              "address": "Jalan Petaling, City Centre, 50000 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
-            "rating": 4.3,
+            "rating": 4.1,
             "price_level": "",
             "opening_hours": [
-              "Monday: 10:00 AM – 10:00 PM",
+              "Monday: 8:00 AM – 10:00 PM",
               "Tuesday: 10:00 AM – 10:00 PM",
-              "Wednesday: 10:00 AM – 10:00 PM",
+              "Wednesday: 8:00 AM – 10:00 PM",
               "Thursday: 10:00 AM – 10:00 PM",
               "Friday: 10:00 AM – 10:00 PM",
               "Saturday: 10:00 AM – 10:00 PM",
@@ -391,10 +404,22 @@
               "longitude": 101.709969,
               "name": "Restoran Mon Chinese Beef Roti",
               "address": "82, Jln Bukit Bintang, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
+              "latitude": 3.145917,
+              "longitude": 101.709969,
+              "name": "Restoran Mon Chinese Beef Roti",
+              "address": "82, Jln Bukit Bintang, Bukit Bintang, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
+            "rating": 4.4,
             "rating": 4.4,
             "price_level": "PRICE_LEVEL_INEXPENSIVE",
             "opening_hours": [
+              "Monday: 7:00 AM – 12:00 AM",
+              "Tuesday: 7:00 AM – 12:00 AM",
+              "Wednesday: 7:00 AM – 12:00 AM",
+              "Thursday: 7:00 AM – 12:00 AM",
+              "Friday: 7:00 AM – 12:00 AM",
+              "Saturday: 7:00 AM – 12:00 AM",
+              "Sunday: 7:00 AM – 12:00 AM"
               "Monday: 7:00 AM – 12:00 AM",
               "Tuesday: 7:00 AM – 12:00 AM",
               "Wednesday: 7:00 AM – 12:00 AM",
@@ -440,6 +465,7 @@
         "day": 2,
         "date": "2026-09-26",
         "type": "departure",
+        "valid": true,
         "valid": true,
         "schedule": [
           {
@@ -507,6 +533,7 @@
               "name": "Hai Kah Lang 海脚人 • TRX",
               "address": "32 & 34, Jalan Utara, Off, Jln Imbi, Imbi, 55100 Kuala Lumpur, Wilayah Persekutuan Kuala Lumpur, Malaysia"
             },
+            "rating": 4.4,
             "rating": 4.4,
             "price_level": "PRICE_LEVEL_MODERATE",
             "opening_hours": [

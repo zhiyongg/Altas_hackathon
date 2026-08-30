@@ -1298,7 +1298,7 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
         if day.start_time >= check_in_dt:
             start_name = f"Arrive & Check-in ({cfg.hotel.get('name', '')})"
-            start_duration = 45 
+            start_duration = 45
             has_explicit_checkin = True
         else:
             start_name = f"Arrive & Drop Luggage ({cfg.hotel.get('name', '')})"
@@ -1311,7 +1311,7 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
         end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel", "duration_min": start_duration}]
-    
+
     for p in day.attractions:
         waypoints.append({"name": p.name, "location": dict(p.location), "kind": "attraction", "place": p})
 
@@ -1326,14 +1326,14 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
                 "place": None
             })
             has_explicit_checkin = True
-        
+
         # If no mid-day check-in was added, force the final node to reflect the check-in
         if not has_explicit_checkin:
             end_name = f"Return & Check-in to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints.extend(meal_waypoints)
     waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
-    
+
     # 4. ONE route matrix over all waypoints (controls API usage)
     matrix = DayRouteMatrix(cfg, waypoints)
     order = _optimize_route_temporal(waypoints, matrix, day)
@@ -1375,7 +1375,7 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
     # FIX: Loop from 0 to capture the start waypoint (Check-in / Leave Hotel)
     for i, wp in enumerate(day.sequence[:-1]):
         loc = wp["location"]
-        
+
         # At index 0, you are already at the hotel; no travel time needed.
         if i == 0:
             travel_s = 0
@@ -1413,12 +1413,12 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
 
         place = wp.get("place")
         dur = wp.get("duration_min") if wp.get("duration_min") is not None else (place.visit_duration_min if place else 60)
-        
+
         # ── FIX: DYNAMIC TIME COMPRESSION (ATTRACTIONS ONLY) ──
         if wp["kind"] == "attraction":
             # Calculate time left in day (reserving 30 mins for the drive home)
             time_left_in_day = (day.end_time - arrival).total_seconds() / 60.0 - 30
-            
+
             if dur > time_left_in_day:
                 if time_left_in_day < 20:
                     dur = 0 # Too late to visit. Set to 0 so validation catches and deletes it.
@@ -1440,7 +1440,7 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                     dur = max(int((close_dt - arrival).total_seconds() / 60), 30)
 
         depart = arrival + timedelta(minutes=dur)
-        
+
         if schedule and travel_s > 0:
             schedule[-1]["transit_to_next"] = {
                 "mode": cfg.transport_mode.lower(),
@@ -1471,7 +1471,7 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
     if schedule:
         prev_name = schedule[-1]["name"].lower()
         is_duplicate_end = (
-            schedule[-1]["name"] == last_name or 
+            schedule[-1]["name"] == last_name or
             any(sub in prev_name for sub in ["check-in", "check-out", "depart"])
         )
 
@@ -1481,9 +1481,9 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                 "mode": cfg.transport_mode.lower(),
                 "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_name}"
             }
-        
+
     schedule.append({
-        "name": last_name, 
+        "name": last_name,
         "kind": last_wp.get("kind", "hotel"), # Dynamically retains the kind, fallbacks safely
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
