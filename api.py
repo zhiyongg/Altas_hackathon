@@ -1,3 +1,5 @@
+#api.py
+
 from pathlib import Path
 import json
 import logging
@@ -11,9 +13,9 @@ from pydantic import BaseModel, Field
 
 # Chat and Itinerary imports
 from agent import run_itinerary_agent
-from chat_agent import ChatEngine
+from chat_agent import ChatEngine, ChatAction
 from itinerary_repo import get_latest_itinerary, save_itinerary
-from itineraryPlanner import TripConfig
+from itineraryPlanner import TripConfig, build_itinerary
 
 # Route helpers (imported with guard so server starts even without env keys)
 try:
@@ -46,9 +48,15 @@ except Exception:
 
 # Hotel, Tools, and Payment imports
 from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
+from flights import get_flight_options
+from activities import get_activity_options
 from payment import create_trip_checkout_sessions, get_checkout_session_status
 from tools import get_hotel_prices_raw
-from schemas import HotelSearchInput, HotelChangeRequest, CreateCheckoutSessionsRequest
+from schemas import (
+    HotelSearchInput, HotelChangeRequest, CreateCheckoutSessionsRequest,
+    FlightSearchRequest, FlightChangeApplyRequest, FlightOption,
+    ActivitySearchRequest,
+)
 from sponsored_hotel import SPONSORED_MOCK_HOTELS
 
 # ==========================================
@@ -334,13 +342,24 @@ async def generate_trip(req: TripRequest):
         if not isinstance(result, dict):
             raise HTTPException(status_code=500, detail="Agent returned a non-object JSON value.")
 
-        _save_json(result)
-        # Start a fresh chat session from exactly the output just generated when
-        # the caller supplies config details for the chat layer.
         if req.trip_config is not None:
             session_id = str(req.trip_config.get("session_id", "testing"))
             chat_engines.pop(session_id, None)
-            _get_chat_engine(session_id, result, req.trip_config, reset=True)
+            engine = _get_chat_engine(session_id, result, req.trip_config, reset=True)
+
+            # The hotel search provider (see the raw `data.hotels[]` shape)
+            # never returns a check-in/check-out policy field — so cfg's
+            # value (mocked to 15:00/11:00 when nothing overrides it) is the
+            # ONLY real source of truth for it. Surface it here so the
+            # frontend reads the exact value the planner scheduled around,
+            # instead of maintaining its own separate guess.
+            cfg = engine.state.cfg
+            for hotel in result.get("hotels", []) or []:
+                hotel.setdefault("stay_schedule", {})
+                hotel["stay_schedule"].setdefault("check_in_time", cfg.check_in_time)
+                hotel["stay_schedule"].setdefault("check_out_time", cfg.check_out_time)
+
+        _save_json(result)
         return result
     except HTTPException:
         raise
@@ -460,6 +479,73 @@ def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, r
     return True
 
 # ==========================================
+# Endpoints: Flight Search & Change
+# ==========================================
+@app.post("/flight/change")
+async def change_flight(req: FlightSearchRequest):
+    """Search flights via Atlas — no per-item backfill loop and no
+    sponsored/featured list, unlike /hotel/change: Atlas returns full
+    per-routing pricing in a single call."""
+    logger.info(f"Received flight search: {req.origin}->{req.destination} {req.depart_date}")
+    try:
+        options = get_flight_options(
+            origin=req.origin, destination=req.destination,
+            depart_date=req.depart_date, return_date=req.return_date,
+            adults=req.adults, children=req.children, infants=req.infants,
+        )
+        return {"flights": [f.model_dump() for f in options]}
+    except Exception as e:
+        logger.error(f"Error searching flights: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/flight/apply")
+async def apply_flight_change(req: FlightChangeApplyRequest):
+    """Apply a newly selected flight: shift arrival/departure times and
+    re-run itinerary planning so the day's schedule recalculates around the
+    new flight — unlike /hotel/change, which swaps the hotel card in place
+    without regenerating the schedule."""
+    path = Path(req.output_path) if req.output_path else OUTPUT_PATH
+    full_output = _read_json(path)
+
+    overrides = dict(req.trip_config or {})
+    overrides["arrival_datetime"] = f"{req.flight.arrival.date}T{req.flight.arrival.time}:00"
+    overrides["departure_datetime"] = f"{req.flight.departure.date}T{req.flight.departure.time}:00"
+
+    cfg = _build_trip_config(full_output, overrides)
+    result = build_itinerary(cfg)
+
+    if result.get("error") and not result.get("days"):
+        raise HTTPException(status_code=502, detail=f"Replanning failed: {result['error']}")
+
+    full_output["daily_itinerary"] = result
+    full_output["flights"] = [req.flight.model_dump()]
+    _save_json(full_output, path)
+
+    # Re-seed the chat session so subsequent chat edits build on the new schedule
+    chat_engines.pop(req.session_id, None)
+    _get_chat_engine(req.session_id, full_output, req.trip_config, reset=True)
+
+    return _normalize_itinerary_payload(full_output)
+
+# ==========================================
+# Endpoints: Activity Search
+# ==========================================
+@app.post("/activity/search")
+async def search_activities(req: ActivitySearchRequest):
+    """Search Google Places for activities — powers the "Add Activity"
+    modal. Reuses the same Places Text Search API tools.py's text_search
+    @tool calls, via a dedicated raw+typed extraction pair (activities.py)
+    following the same pattern as hotels.py/flights.py, rather than the
+    agent tool's pre-formatted-string output."""
+    logger.info(f"Received activity search: query={req.query!r} near=({req.latitude},{req.longitude})")
+    try:
+        options = get_activity_options(req.query, req.latitude, req.longitude)
+        return {"activities": [a.model_dump() for a in options]}
+    except Exception as e:
+        logger.error(f"Error searching activities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
 # Endpoints: Payments
 # ==========================================
 @app.post("/payment/create-checkout-sessions")
@@ -492,6 +578,59 @@ async def checkout_session_status(session_id: str):
     except Exception as e:
         logger.error(f"Error retrieving checkout session status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ItineraryItemInput(BaseModel):
+    id: str
+    time: str
+    kind: str  # 'activity' | 'hotel' | 'meal' | 'flight'
+    name: str
+    location: Optional[dict[str, Any]] = None
+    notes: Optional[str] = None
+
+class UpdateItineraryItemRequest(BaseModel):
+    session_id: str
+    day_number: int  # 1-indexed
+    item: ItineraryItemInput
+    delete: bool = False
+
+@app.post("/api/itinerary/item", response_model=ChatResponse)
+async def update_itinerary_item(req: UpdateItineraryItemRequest):
+    engine = chat_engines.get(req.session_id)
+    if engine is None or engine.state is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No active session for this trip — generate or chat with the itinerary before editing items directly.",
+        )
+
+    days = engine.state.display_itinerary.get("days", [])
+    idx = req.day_number - 1
+    if idx < 0 or idx >= len(days):
+        raise HTTPException(status_code=400, detail="day_number out of range")
+
+    schedule = days[idx].setdefault("schedule", [])
+
+    if req.delete:
+        schedule[:] = [s for s in schedule if s.get("_client_id") != req.item.id]
+    else:
+        entry = {
+            "_client_id": req.item.id,
+            "time": req.item.time,
+            "kind": req.item.kind,
+            "name": req.item.name,
+            "location": req.item.location,
+            "notes": req.item.notes,
+        }
+        existing = next((i for i, s in enumerate(schedule) if s.get("_client_id") == req.item.id), None)
+        if existing is not None:
+            schedule[existing] = entry
+        else:
+            schedule.append(entry)
+        schedule.sort(key=lambda s: s.get("time", ""))
+
+    full_output = _read_json()
+    normalized = _normalize_itinerary_payload(full_output, engine.state.display_itinerary)
+    return ChatResponse(response="Updated itinerary item.", session_id=req.session_id, itinerary=normalized)
 
 # ==========================================
 # Endpoint: Route Recalculation

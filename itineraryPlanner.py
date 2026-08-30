@@ -479,7 +479,20 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
         # 1. Compute the exact temporal window FIRST, then hand it to the
         #    constructor so the DayPlan is never created without its bounds.
         if dtype == "arrival":
-            start_time = arrival_dt + timedelta(hours=2)
+            # If the flight lands after standard check-in time (15:00 by
+            # default), the guest can check in almost right away — give them
+            # 1 hour to clear immigration/baggage and get to the hotel, then
+            # start the check-in beat there, instead of the flat 2-hour
+            # touring buffer used below. If they land before check-in opens,
+            # keep the 2-hour buffer for bags/immigration/transit and let
+            # the mid-day check-in insertion further down handle the actual
+            # 15:00 check-in once it's reached.
+            cin_time = datetime.strptime(cfg.check_in_time, "%H:%M").time()
+            arrival_check_in_dt = arrival_dt.replace(hour=cin_time.hour, minute=cin_time.minute, second=0)
+            if arrival_dt >= arrival_check_in_dt:
+                start_time = arrival_dt + timedelta(hours=1)
+            else:
+                start_time = arrival_dt + timedelta(hours=2)
             end_time = arrival_dt.replace(hour=21, minute=0, second=0)
         elif dtype == "departure":
             cout_time = datetime.strptime(cfg.check_out_time, "%H:%M").time()
@@ -1444,26 +1457,37 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         })
         cur, prev = depart, loc
 
-    # Process Final Node (Return to Hotel/Airport) without duplicating explicit check-ins/check-outs
-    last_wp_name = day.sequence[-1]["name"]
-    last_loc = day.sequence[-1]["location"]
-    ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
-    
-    # Check if the last scheduled item is already a hotel check-in/out event to prevent duplicates
-    is_duplicate_end = schedule and any(sub in schedule[-1]["name"].lower() for sub in ["check-in", "check-out", "depart"])
+    # Process Final Node cleanly (DRY implementation)
+    last_wp = day.sequence[-1]
+    last_name = last_wp["name"]
+    last_loc = last_wp["location"]
+
+    # Calculate return time
+    ret_s = last_wp.get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+
+    # Robust duplicate check: validates against exact name matches or specific keywords
+    is_duplicate_end = False
+    if schedule:
+        prev_name = schedule[-1]["name"].lower()
+        is_duplicate_end = (
+            schedule[-1]["name"] == last_name or 
+            any(sub in prev_name for sub in ["check-in", "check-out", "depart"])
+        )
 
     if not is_duplicate_end:
         if schedule and ret_s > 0:
             schedule[-1]["transit_to_next"] = {
                 "mode": cfg.transport_mode.lower(),
-                "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_wp_name}"
+                "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_name}"
             }
-        schedule.append({
-            "name": last_wp_name, "kind": "hotel",
-            "arrival": cur + timedelta(seconds=ret_s), "depart": None,
-            "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
-            "rating": None, "price_level": None, "opening_hours": []
-        })
+        
+    schedule.append({
+        "name": last_name, 
+        "kind": last_wp.get("kind", "hotel"), # Dynamically retains the kind, fallbacks safely
+        "arrival": cur + timedelta(seconds=ret_s), "depart": None,
+        "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
+        "rating": None, "price_level": None, "opening_hours": []
+    })
 
     if day.day_type == "normal" and schedule and schedule[0].get("kind") == "hotel":
         schedule.pop(0)
