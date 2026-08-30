@@ -502,6 +502,7 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
             # Start touring at 8 AM, OR the check-out time (whichever is earlier)
             start_time = min(default_start, checkout_dt)
             end_time = departure_dt - timedelta(hours=3)
+            
         else:
             start_time = base.replace(hour=8, minute=0)
             end_time = base.replace(hour=21, minute=0)
@@ -1491,6 +1492,11 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
 
     if day.day_type == "normal" and schedule and schedule[0].get("kind") == "hotel":
         schedule.pop(0)
+
+    if day.day_type == "departure" and schedule:
+        first = schedule[0]
+        if first.get("kind") == "hotel" and any(token in first["name"].lower() for token in ["leave hotel", "drop bags"]):
+            schedule.pop(0)
 
     day.schedule = schedule
     return schedule
