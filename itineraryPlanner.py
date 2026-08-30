@@ -459,7 +459,20 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
         # 1. Compute the exact temporal window FIRST, then hand it to the
         #    constructor so the DayPlan is never created without its bounds.
         if dtype == "arrival":
-            start_time = arrival_dt + timedelta(hours=2)
+            # If the flight lands after standard check-in time (15:00 by
+            # default), the guest can check in almost right away — give them
+            # 1 hour to clear immigration/baggage and get to the hotel, then
+            # start the check-in beat there, instead of the flat 2-hour
+            # touring buffer used below. If they land before check-in opens,
+            # keep the 2-hour buffer for bags/immigration/transit and let
+            # the mid-day check-in insertion further down handle the actual
+            # 15:00 check-in once it's reached.
+            cin_time = datetime.strptime(cfg.check_in_time, "%H:%M").time()
+            arrival_check_in_dt = arrival_dt.replace(hour=cin_time.hour, minute=cin_time.minute, second=0)
+            if arrival_dt >= arrival_check_in_dt:
+                start_time = arrival_dt + timedelta(hours=1)
+            else:
+                start_time = arrival_dt + timedelta(hours=2)
             end_time = arrival_dt.replace(hour=21, minute=0, second=0)
         elif dtype == "departure":
             cout_time = datetime.strptime(cfg.check_out_time, "%H:%M").time()
@@ -1425,15 +1438,16 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         })
         cur, prev = depart, loc
 
-    last_loc = day.sequence[-1]["location"]
-    ret_s = day.sequence[-1].get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
+    last_wp = day.sequence[-1]
+    last_loc = last_wp["location"]
+    ret_s = last_wp.get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
     if schedule and ret_s > 0:
         schedule[-1]["transit_to_next"] = {
             "mode": cfg.transport_mode.lower(),
-            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> Return to Hotel"
+            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_wp['name']}"
         }
     schedule.append({
-        "name": "Return to Hotel", "kind": "hotel",
+        "name": last_wp["name"], "kind": last_wp["kind"],
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
         "rating": None, "price_level": None, "opening_hours": []

@@ -290,13 +290,24 @@ async def generate_trip(req: TripRequest):
         if not isinstance(result, dict):
             raise HTTPException(status_code=500, detail="Agent returned a non-object JSON value.")
 
-        _save_json(result)
-        # Start a fresh chat session from exactly the output just generated when
-        # the caller supplies config details for the chat layer.
         if req.trip_config is not None:
             session_id = str(req.trip_config.get("session_id", "testing"))
             chat_engines.pop(session_id, None)
-            _get_chat_engine(session_id, result, req.trip_config, reset=True)
+            engine = _get_chat_engine(session_id, result, req.trip_config, reset=True)
+
+            # The hotel search provider (see the raw `data.hotels[]` shape)
+            # never returns a check-in/check-out policy field — so cfg's
+            # value (mocked to 15:00/11:00 when nothing overrides it) is the
+            # ONLY real source of truth for it. Surface it here so the
+            # frontend reads the exact value the planner scheduled around,
+            # instead of maintaining its own separate guess.
+            cfg = engine.state.cfg
+            for hotel in result.get("hotels", []) or []:
+                hotel.setdefault("stay_schedule", {})
+                hotel["stay_schedule"].setdefault("check_in_time", cfg.check_in_time)
+                hotel["stay_schedule"].setdefault("check_out_time", cfg.check_out_time)
+
+        _save_json(result)
         return result
     except HTTPException:
         raise

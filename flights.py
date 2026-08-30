@@ -126,5 +126,20 @@ def get_flight_options(
     mirroring hotels.py's get_hotel_ui_cards()."""
     raw = search_flights_raw(origin, destination, depart_date, return_date, adults, children, infants)
     if "error" in raw:
+        print("Error fetching flight options:", raw.get("details", raw["error"]))
         return []
     return extract_flight_options(raw)
+
+if __name__ == "__main__":
+    # Example usage
+    flight_options = get_flight_options(
+        origin="KUL",
+        destination="HND",
+        depart_date="2026-09-21",
+        return_date="2026-09-22",
+        adults=1,
+        children=0,
+        infants=0,
+    )
+    for option in flight_options:
+        print(option)
