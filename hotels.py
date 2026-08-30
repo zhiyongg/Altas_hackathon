@@ -51,7 +51,27 @@ def _parse_lead_price(item: dict, nights: int = 1) -> tuple[float | None, float 
     and then re-multiplying it by `nights` on top (the old bug: a $291/night,
     3-night stay totalling $874 was displayed as "$874/night" and its
     "total" computed as $874 x 3 = $2,621).
+
+    A hotel dict may instead carry an explicit ``price_per_night``, which is
+    NIGHTLY and gets multiplied up. The sponsored/mock list uses that field:
+    its figures are nightly rates, and running them through the stay-total
+    branch divided them by the night count (a $245/night suite showed as $82).
     """
+    nightly_raw = item.get("price_per_night")
+    if nightly_raw is not None:
+        currency = "USD"
+        if isinstance(nightly_raw, dict):
+            currency = nightly_raw.get("currency") or currency
+            nightly_raw = nightly_raw.get("amount") or nightly_raw.get("value")
+        else:
+            currency = item.get("currency") or currency
+        try:
+            nightly = float(nightly_raw) if nightly_raw is not None else None
+        except (ValueError, TypeError):
+            nightly = None
+        if nightly is not None:
+            return nightly, nightly * (nights or 1), currency
+
     price_raw = item.get("price")
     currency = "USD"
     if isinstance(price_raw, dict):
@@ -109,6 +129,13 @@ def search_mock_hotels(
       (same field names as the StayAPI /v1/booking/search response)
     - ``dest_id`` — the Booking.com destination this hotel belongs to,
       used to filter against ``input.dest_id``
+    - ``is_sponsored`` (optional, defaults to True) — set this False on
+      entries from a "regular"/non-sponsored list. The frontend
+      (ChangeAccommodationModal) splits results into featured vs. regular
+      sections based on this flag, so callers wanting both should pass
+      ``SPONSORED_MOCK_HOTELS + NOT_SPONSORED_MOCK_HOTELS`` (from
+      sponsored_hotel.py) as ``mock_hotels`` rather than just the sponsored
+      list on its own.
 
     Filtering logic:
     1. **dest_id** — only hotels whose ``dest_id`` matches ``input.dest_id``
@@ -215,7 +242,11 @@ def search_mock_hotels(
             rating=rating,
             review_count=review_count,
             image_url=image_url,
-            is_sponsored=True,  # everything in search_mock_hotels comes from the sponsored/featured list
+            # Reads the per-item "is_sponsored" flag so a combined
+            # SPONSORED_MOCK_HOTELS + NOT_SPONSORED_MOCK_HOTELS list is tagged
+            # correctly. Defaults to True for back-compat with existing
+            # SPONSORED_MOCK_HOTELS entries, which don't set this key.
+            is_sponsored=bool(item.get("is_sponsored", True)),
             dest_id=str(input.dest_id),
             dest_type=input.dest_type,
             stay_schedule=StaySchedule(
@@ -278,23 +309,17 @@ def backfill_hotel_rooms(
             updated.append(hotel)
             continue
 
-        # Cheapest room becomes selected_room; the rest go to available_rooms
+        # Cheapest room becomes selected_room; the rest go to available_rooms.
+        # model_copy(update=...) instead of re-constructing Hotel(...) field by
+        # field: the old version listed only some fields, so backfilling rooms
+        # silently WIPED rating, review_count, image_url, is_sponsored, dest_id
+        # and dest_type (losing the sponsored badge and the destination the
+        # frontend needs to re-search).
         sorted_rooms = sorted(rooms, key=lambda r: r.total_price)
-        selected = sorted_rooms[0]
-        available = sorted_rooms[1:]
-
-        updated.append(Hotel(
-            hotel_id=hotel.hotel_id,
-            name=hotel.name,
-            address=hotel.address,
-            city=hotel.city,
-            latitude=hotel.latitude,
-            longitude=hotel.longitude,
-            star_rating=hotel.star_rating,
-            stay_schedule=hotel.stay_schedule,
-            selected_room=selected,
-            available_rooms=available,
-        ))
+        updated.append(hotel.model_copy(update={
+            "selected_room": sorted_rooms[0],
+            "available_rooms": sorted_rooms[1:],
+        }))
 
     return updated
 

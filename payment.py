@@ -38,7 +38,9 @@ def create_trip_checkout_sessions(
 
     Two modes, matching the frontend's "Pay Individual" / "Split Bill"
     toggle:
-    - split=True  -> one session per member, each for total_cost / len(members).
+    - split=True  -> one session per member. The total is divided in integer
+      cents and the leftover cents go to the earliest members, so the sessions
+      always add up to total_cost exactly (amounts can differ by $0.01).
     - split=False -> one session only, for whichever member is flagged
       isCurrentUser (falls back to the first member), for the full
       total_cost — this is the "I'll cover it" path.
@@ -69,18 +71,29 @@ def create_trip_checkout_sessions(
 
     if split:
         targets = members
-        amount = round(total_cost / len(members), 2)
+        # Split in integer cents and hand the leftover cents to the first few
+        # members, so the sessions sum to total_cost EXACTLY. The old
+        # round(total_cost / len(members), 2) charged every member the same
+        # rounded figure, which under- or over-collected by up to
+        # len(members)/2 cents (e.g. $100 across 3 people billed $99.99).
+        total_cents = int(round(total_cost * 100))
+        base_cents, remainder = divmod(total_cents, len(members))
+        amounts_cents = [
+            base_cents + (1 if i < remainder else 0) for i in range(len(members))
+        ]
     else:
         current = next((m for m in members if m.get("isCurrentUser")), members[0])
         targets = [current]
-        amount = round(total_cost, 2)
+        amounts_cents = [int(round(total_cost * 100))]
 
-    amount_cents = int(round(amount * 100))
-    if amount_cents <= 0:
-        raise RuntimeError(f"Computed a non-positive charge amount ({amount}) — check total_cost/members.")
+    if any(cents <= 0 for cents in amounts_cents):
+        raise RuntimeError(
+            f"Computed a non-positive charge amount ({min(amounts_cents) / 100}) — "
+            f"check total_cost/members.")
 
     sessions: list[dict] = []
-    for member in targets:
+    for member, amount_cents in zip(targets, amounts_cents):
+        amount = amount_cents / 100
         label = (
             f"{trip_destination} trip — {member.get('name', 'Traveler')}'s share"
             if split

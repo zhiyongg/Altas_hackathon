@@ -24,80 +24,12 @@ STAYAPI_KEY = os.getenv("STAYAPI_KEY")
 # ==========================================
 # Helper Functions (Business Logic)
 # ==========================================
-def parse_datetime(dt_str: str) -> tuple[str, str]:
-    if not dt_str or len(dt_str) < 12:
-        return "--:--", "Unknown Date"
-    dt = datetime.strptime(dt_str[:12], "%Y%m%d%H%M")
-    date_formatted = f"{dt.day} {dt.strftime('%b, %A')}"
-    return dt.strftime("%H:%M"), date_formatted
-
-def extract_flight_ui_cards(res_data: dict) -> list[dict]:
-    routings = res_data.get("routings", [])
-    cards = []
-
-    for item in routings:
-        segments = item.get("fromSegments") or item.get("segments", [])
-        if not segments:
-            continue
-
-        first_seg = segments[0]
-        last_seg = segments[-1]
-
-        dep_raw = first_seg.get("depTime") or first_seg.get("departureTime", "")
-        arr_raw = last_seg.get("arrTime") or last_seg.get("arrivalTime", "")
-        dep_time, dep_date = parse_datetime(dep_raw)
-        arr_time, arr_date = parse_datetime(arr_raw)
-
-        dep_airport = first_seg.get("depAirport") or first_seg.get("departureAirport", "")
-        arr_airport = last_seg.get("arrAirport") or last_seg.get("arrivalAirport", "")
-        route_str = f"{dep_airport} - {arr_airport}"
-
-        carrier_val = first_seg.get("carrier")
-        if isinstance(carrier_val, dict):
-            carrier_name = carrier_val.get("name") or carrier_val.get("code", "Airline")
-        elif isinstance(carrier_val, str) and carrier_val.strip():
-            carrier_name = carrier_val
-        else:
-            carrier_name = (
-                first_seg.get("carrierName")
-                or first_seg.get("marketingAirline")
-                or first_seg.get("operatingAirline")
-                or "Airline"
-            )
-
-        flight_number = first_seg.get("flightNumber", "")
-
-        price_info = item.get("adultPrice") or item.get("price") or item.get("totalPrice") or 0
-        currency = item.get("currency") or "USD"
-        formatted_price = f"${float(price_info):.2f}" if currency == "USD" else f"{currency} {price_info}"
-
-        num_stops = len(segments) - 1
-        layover_text = "Direct"
-        if num_stops > 0:
-            transfer_airport = first_seg.get("arrAirport") or first_seg.get("arrivalAirport", "")
-            layover_text = f"{num_stops} stop in {transfer_airport}"
-
-        card = {
-            "routingIdentifier": item.get("routingIdentifier") or item.get("id"),
-            "airline": f"{carrier_name} {flight_number}".strip(),
-            "route": route_str,
-            "departure": {
-                "time": dep_time,
-                "date": dep_date,
-                "airport": first_seg.get("depAirportName") or dep_airport,
-            },
-            "arrival": {
-                "time": arr_time,
-                "date": arr_date,
-                "airport": last_seg.get("arrAirportName") or arr_airport,
-            },
-            "layover": layover_text,
-            "price": formatted_price,
-            "seats_available": f"{item.get('seats') or first_seg.get('seatCount') or 9} Seats Available",
-            "refundable": "Refundable" if item.get("refundable") else "Non-refundable",
-        }
-        cards.append(card)
-    return cards
+# NOTE: flight response parsing lives in flights.py (extract_flight_options).
+# tools.py used to carry a second, near-identical copy of it
+# (parse_datetime + extract_flight_ui_cards) whose only difference was that it
+# pre-formatted prices as display strings like "$311.00" — which the agent then
+# had to parse back into FlightPrice numbers, and often guessed wrong. The
+# @tool below now reuses the typed parser and emits real numbers.
 
 # ==========================================
 # Flight Search (raw HTTP call, reusable outside the @tool wrapper)
@@ -158,20 +90,25 @@ def search_flights_raw(
 def search_flights_atlas(origin: str, destination: str, fromDate: str, returnDate: str, adults: int, children: int, infants: int) -> str:
     """
     Search for flights using the Atlas Flight API.
+    Returns a JSON list of flight options with NUMERIC prices and ISO dates.
     Args:
         origin: Origin airport code (e.g., KUL)
         destination: Destination airport code (e.g., BKI)
         fromDate: Flight date (YYYY-MM-DD)
-        returnDate: Return date (YYYY-MM-DD)
+        returnDate: Return date (YYYY-MM-DD), or an empty string for one-way
         adults: Number of adult passengers
         children: Number of child passengers
         infants: Number of infant passengers
 
     """
+    # Imported here, not at module scope: flights.py imports search_flights_raw
+    # from this module, so a top-level import would be circular.
+    from flights import extract_flight_options
+
     res = search_flights_raw(origin, destination, fromDate, returnDate, adults, children, infants)
     if "error" in res:
         return json.dumps(res)
-    return json.dumps(extract_flight_ui_cards(res))
+    return json.dumps([f.model_dump() for f in extract_flight_options(res)])
 
 @tool
 def nearby_search(location: str, keyword: str) -> str:
@@ -186,7 +123,7 @@ def nearby_search(location: str, keyword: str) -> str:
         
     try:
         lat, lng = map(float, location.replace(" ", "").split(","))
-    except Exception as e:
+    except (ValueError, AttributeError):
         return json.dumps({"error": "Failed to search nearby. Ensure location is 'lat,lng'."})
 
     url = "https://places.googleapis.com/v1/places:searchNearby"
@@ -295,11 +232,11 @@ def plan_itinerary(
     airport_name: str = "",
     airport_lat: float = 0.0,
     airport_lng: float = 0.0,
-    travel_style: str = "",
+    travel_style: str = "moderate",
     transport_mode: str = "TRANSIT",
     group_size: int = 2,
-    budget: str = "",
-    check_in_time: str = "14:00",
+    budget: str = "medium",
+    check_in_time: str = "15:00",
     check_out_time: str = "11:00",
     custom_vibe: str = ""
 ) -> str:
@@ -321,11 +258,11 @@ def plan_itinerary(
         airport_lat: Latitude of the airport
         airport_lng: Longitude of the airport
         travel_style: Travel pacing style ('relaxed', 'moderate', or 'packed')
-        transport_mode: Primary mode of transportation ('TRANSIT', 'DRIVE', or 'WALK')
+        transport_mode: Primary mode of transportation ('TRANSIT', 'DRIVE', 'WALK' or 'BICYCLE')
         group_size: Number of travelers
         budget: Overall trip budget level ('low', 'medium', or 'high')
-        check_in_time: Hotel check-in time (HH:MM)
-        check_out_time: Hotel check-out time (HH:MM)
+        check_in_time: Hotel check-in time (HH:MM, 24-hour)
+        check_out_time: Hotel check-out time (HH:MM, 24-hour)
         custom_vibe: Specific semantic vibe (e.g. 'Cyberpunk', 'Romantic')
     """
     from itineraryPlanner import build_itinerary, TripConfig
@@ -453,7 +390,7 @@ def get_hotel_prices_raw(hotel_id: str, checkin: str, checkout: str, adults: int
         "units": "metric",
         "locale": "en-us",
     }
-    return _stayapi_request(f"/v1/booking/hotel/prices", params=query)
+    return _stayapi_request("/v1/booking/hotel/prices", params=query)
 
 # ==========================================
 # Hotel / Stay Tools
@@ -473,20 +410,44 @@ def lookup_destination(query: str) -> str:
         return json.dumps({"error": str(e)})
 
 @tool
-def search_hotels(params: HotelSearchInput) -> str:
+def search_hotels(
+    dest_id: str,
+    checkin: str,
+    checkout: str,
+    dest_type: str = "CITY",
+    adults: int = 2,
+    rooms: int = 1,
+    children: int = 0,
+    currency: str = "USD",
+) -> str:
     """
     Search Booking.com hotels in a destination for the given dates.
     Returns a list of hotels with hotel_id, name, rating, price, address, and cancellation flags.
     Use lookup_destination first to obtain dest_id and dest_type.
     Args:
-        dest_id: Destination ID obtained from lookup_destination.
-        dest_type: Destination type (e.g. CITY, DISTRICT) from lookup_destination.
+        dest_id: Destination ID obtained from lookup_destination (numeric, e.g. '-372490').
         checkin: Check-in date in YYYY-MM-DD format.
         checkout: Check-out date in YYYY-MM-DD format.
+        dest_type: Destination type (e.g. CITY, DISTRICT) from lookup_destination.
         adults: Number of adult guests.
         rooms: Number of rooms.
         children: Number of child guests.
+        currency: Currency code for prices (e.g. USD).
     """
+    # Flat arguments on purpose: this used to take a single `params:
+    # HotelSearchInput`, which makes LangChain advertise a nested
+    # {"params": {...}} tool schema while the docstring promised flat fields.
+    # The model followed the docstring and every call failed validation.
+    params = HotelSearchInput(
+        dest_id=dest_id,
+        dest_type=dest_type,
+        checkin=checkin,
+        checkout=checkout,
+        adults=adults,
+        rooms=rooms,
+        children=children,
+        currency=currency,
+    )
     raw = search_hotels_raw(params)
     return json.dumps(raw, indent=2, default=str)
 
@@ -520,3 +481,12 @@ def get_hotel_prices(hotel_id: str, checkin: str, checkout: str, adults: int, ro
     """
     raw = get_hotel_prices_raw(hotel_id, checkin, checkout, adults, rooms)
     return json.dumps(raw, indent=2, default=str)
+
+if __name__ == "__main__":
+    output = search_hotels_raw(HotelSearchInput(
+        dest_id="246227", dest_type="CITY",
+        checkin="2026-09-20", checkout="2026-09-22",
+        adults=2, rooms=1, children=0, children_ages=[],
+        currency="USD", offset=0, rows_per_page=10,
+    ))
+    print(output)

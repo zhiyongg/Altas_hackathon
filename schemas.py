@@ -1,15 +1,18 @@
-from dataclasses import dataclass, field
-from datetime import datetime
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-# Allowed values shared by itineraryPlanner.py (TRAVEL_STYLE_CAPACITY / _SPEED /
-# BUDGET_PRICE_LEVELS keys) and by agent.py when it fills a TripConfig. The
-# planner falls back to a default on any other string, so keep these in sync.
-TravelStyle   = Literal["relaxed", "moderate", "packed"]
-TransportMode = Literal["DRIVE", "TRANSIT", "WALK", "BICYCLE"]
-BudgetLevel   = Literal["low", "medium", "high"]
+# The planner's own working structures (TripConfig / Place / DayPlan) live in
+# itineraryPlanner.py and are imported from there — this module deliberately
+# does NOT keep a second copy of them, because the two copies had drifted apart
+# (different per-day caps, and schemas' DayPlan was missing dropped_meals,
+# which chat_agent.day_to_snapshot requires).
+#
+# Allowed planner vocabulary, for reference when building a TripConfig:
+#   travel_style   : relaxed | moderate | packed      (TRAVEL_STYLE_CAPACITY)
+#   transport_mode : DRIVE | TRANSIT | WALK | BICYCLE (_SPEED)
+#   budget         : low | medium | high              (BUDGET_PRICE_LEVELS)
+# The planner falls back to a default on any other string.
 
 
 # --- Overview Models ---
@@ -28,91 +31,36 @@ class TripOverview(BaseModel):
     total_estimated_budget: Budget
 
 # --- Flight Models ---
+# Two flight shapes exist on purpose and are NOT interchangeable:
+#   Flight / FlightPrice -> the agent-authored shape stored inside
+#       ItineraryPlan.flights (one entry per direction, itinerary-oriented).
+#   FlightOption         -> the search-result shape returned by
+#       flights.get_flight_options() to the frontend's flight picker.
+# /flight/apply converts a chosen FlightOption into Flight entries so the
+# saved itinerary keeps a single, consistent flights[] shape.
 
 class FlightPrice(BaseModel):
     adult_price: float
-    adult_tax: float
+    adult_tax: float = Field(default=0.0, description="Taxes/fees per adult; 0 when the provider only returns an all-in fare")
     total: float
-    currency: str
+    currency: str = "USD"
 
 class Flight(BaseModel):
     direction: str = Field(description="outbound or return")
     routing_id: str
     carrier: str
     flight_number: str
-    cabin: str
-    fare_family: str
+    # Atlas's search response carries no cabin/fare-family on the routings the
+    # tools parse, so these default to empty rather than being required (a
+    # required field here just pushes the LLM into inventing "Economy"/"Standard").
+    cabin: str = ""
+    fare_family: str = ""
     dep_airport: str
     dep_time: str
     arr_airport: str
     arr_time: str
-    duration_minutes: int
+    duration_minutes: int = 0
     price: FlightPrice
-
-# --- Itinerary Planner Working Structures ---
-# Plain dataclasses used by itineraryPlanner.py while it builds the plan.
-# They are deliberately NOT pydantic models: during the pipeline they carry live
-# datetime and Place objects, and are only converted to the pydantic models
-# below when build_itinerary() emits its JSON.
-
-MIN_PER_DAY          = 3
-MAX_PER_DAY          = 8
-
-@dataclass
-class TripConfig:
-    destination: str
-    start_date: str                     
-    end_date: str
-    arrival_datetime: str               
-    departure_datetime: str
-    hotel: dict                         # Location-shaped: {"name", "latitude", "longitude"}
-    # Everything below has a default so agent.py can build a config from just
-    # destination, dates and a hotel, and let the planner supply the rest.
-    airport: dict = field(default_factory=dict)   # Location-shaped, unused by the pipeline today
-    travel_style: TravelStyle = "moderate"
-    transport_mode: TransportMode = "TRANSIT"
-    group_size: int = 2
-    budget: BudgetLevel = "medium"
-    check_in_time: str = "15:00"        # 24h HH:MM — parsed with strptime("%H:%M")
-    check_out_time: str = "11:00"       # 24h HH:MM — parsed with strptime("%H:%M")
-    selected_preferences: list = field(default_factory=list)  # keys of THEME_TO_TYPES
-    preferences: dict = field(default_factory=dict)           # filled by the planner
-    custom_vibe: str = ""
-
-@dataclass
-class Place:
-    id: str
-    name: str
-    location: dict                      
-    types: list[str]
-    primary_type: str = ""
-    rating: float = 0.0
-    user_rating_count: int = 0
-    price_level: str = ""
-    opening_hours: list = field(default_factory=list)
-    visit_duration_min: int = 60
-    score: float = 0.0
-    source: str = ""
-
-@dataclass
-class DayPlan:
-    day_index: int
-    date: str
-    day_type: str                       
-    start_time: datetime = field(default_factory=lambda: datetime(2000, 1, 1, 9))
-    end_time: datetime   = field(default_factory=lambda: datetime(2000, 1, 1, 21))
-    base_location: dict  = field(default_factory=dict)
-    attractions: list    = field(default_factory=list)
-    meals: dict          = field(default_factory=dict)
-    sequence: list       = field(default_factory=list)
-    schedule: list       = field(default_factory=list)
-    valid: bool          = True
-    violations: list     = field(default_factory=list)
-    
-    # ── FIX: Add the missing capacity tracking ──
-    capacity_min: int    = MIN_PER_DAY
-    capacity_max: int    = MAX_PER_DAY
-
 
 # --- Places, Activities & Route Models ---
 # Pydantic mirror of the JSON returned by itineraryPlanner.build_itinerary(),
@@ -125,15 +73,27 @@ class Location(BaseModel):
     address: Optional[str] = Field(default=None, description="Physical address of the location")
 
 class ScheduleEntry(BaseModel):
+    # extra="allow" because this model is used to VALIDATE planner output that is
+    # then re-serialized (agent.py). A strict model silently DROPS any planner
+    # or frontend field it doesn't declare — that is how travel_time_min was
+    # being lost between build_itinerary() and the saved itinerary JSON.
+    model_config = ConfigDict(extra="allow")
+
     time: str = Field(description="Arrival time HH:MM")
     name: str = Field(description="Stop name, e.g. 'Lunch: Ichiran' or an attraction name")
     kind: str = Field(description="Stop kind: hotel, attraction or meal")
-    duration_min: int = Field(description="Minutes spent at this stop")
-    location: Location
+    duration_min: int = Field(default=0, description="Minutes spent at this stop")
+    # Optional because /api/itinerary/item lets the frontend add an entry with no
+    # coordinates (its ItineraryItemInput.location is Optional). While this was
+    # required, any such manual entry made the whole saved itinerary fail
+    # ItineraryPlan validation on the next agent pass.
+    location: Optional[Location] = Field(default=None, description="Coordinates of this stop; absent on manually added entries")
+    travel_time_min: int = Field(default=0, description="Minutes travelled from the previous stop")
     rating: Optional[float] = Field(default=None, description="Google rating, null for hotel stops")
     price_level: Optional[str] = Field(default=None, description="Google price level enum (e.g., PRICE_LEVEL_MODERATE)")
-    opening_hours: List[str] = Field(default=[], description="Weekday opening-hour descriptions")
+    opening_hours: List[str] = Field(default_factory=list, description="Weekday opening-hour descriptions")
     transit_to_next: Optional[dict] = Field(default=None, description="Transportation to next activity")
+    notes: Optional[str] = Field(default=None, description="Free-text note, set by manual frontend edits")
 
 class DayMeals(BaseModel):
     breakfast: Optional[str] = Field(default=None, description="Breakfast venue name")
@@ -145,8 +105,8 @@ class DailyItinerary(BaseModel):
     date: str = Field(description="Date YYYY-MM-DD")
     type: str = Field(description="Day type: arrival, normal or departure")
     valid: bool = Field(default=True, description="Whether the day passed constraint validation")
-    schedule: List[ScheduleEntry] = Field(default=[], description="Ordered stops for the day")
-    attractions: List[str] = Field(default=[], description="Attraction names assigned to this day")
+    schedule: List[ScheduleEntry] = Field(default_factory=list, description="Ordered stops for the day")
+    attractions: List[str] = Field(default_factory=list, description="Attraction names assigned to this day")
     meals: DayMeals = Field(default_factory=DayMeals, description="Chosen meal venue per slot")
 
 class PlannerItinerary(BaseModel):
@@ -158,7 +118,7 @@ class PlannerItinerary(BaseModel):
     destination: str = Field(default="", description="Destination as passed in TripConfig")
     start: str = Field(default="", description="Trip start date YYYY-MM-DD")
     end: str = Field(default="", description="Trip end date YYYY-MM-DD")
-    days: List[DailyItinerary] = Field(default=[], description="Day-by-day plan")
+    days: List[DailyItinerary] = Field(default_factory=list, description="Day-by-day plan")
     error: Optional[str] = Field(default=None, description="Set when discovery produced no candidates")
 
 
@@ -197,7 +157,7 @@ class Hotel(BaseModel):
     dest_type: Optional[str] = Field(default=None, description="StayAPI destination type (e.g. CITY, DISTRICT) matching dest_id")
     stay_schedule: StaySchedule = Field(description="Check-in/out dates, times, and duration")
     selected_room: RoomOption = Field(description="Selected room type with price and occupancy capacity")
-    available_rooms: List[RoomOption] = Field(default=[], description="Other available room options")
+    available_rooms: List[RoomOption] = Field(default_factory=list, description="Other available room options")
 
 # --- Master Itinerary Output Schema ---
 class CostBreakdown(BaseModel):
@@ -218,16 +178,6 @@ class ItineraryPlan(BaseModel):
 
 class HotelSearchInput(BaseModel):
     dest_id: str = Field(..., description="From lookup_destination")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_dest_id(cls, data):
-        # lookup_destination returns dest_id as an int (e.g. -372490);
-        # the search endpoint just wants it as a query string either way.
-        if isinstance(data, dict) and isinstance(data.get("dest_id"), int):
-            data = {**data, "dest_id": str(data["dest_id"])}
-        return data
-
     dest_type: str = Field("CITY", description="From lookup_destination, e.g. CITY/DISTRICT/AIRPORT/LANDMARK")
     checkin: str = Field(..., description="YYYY-MM-DD")
     checkout: str = Field(..., description="YYYY-MM-DD")
@@ -238,6 +188,15 @@ class HotelSearchInput(BaseModel):
     rows_per_page: int = Field(25, ge=1, le=100)
     offset: int = Field(0, ge=0)
     currency: str = Field("USD")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_dest_id(cls, data):
+        # lookup_destination returns dest_id as an int (e.g. -372490);
+        # the search endpoint just wants it as a query string either way.
+        if isinstance(data, dict) and isinstance(data.get("dest_id"), int):
+            data = {**data, "dest_id": str(data["dest_id"])}
+        return data
 
 
 class HotelChangeRequest(BaseModel):
@@ -295,6 +254,16 @@ class FlightOption(BaseModel):
     currency: str = "USD"
     seats_left: Optional[int] = None
     is_refundable: bool = False
+    # Which half of the trip this leg is. A FlightOption always describes ONE
+    # direction: `departure` is leaving that leg's origin, `arrival` is landing
+    # at that leg's destination. Callers need to know which, because the
+    # outbound leg's arrival is when the trip STARTS while the return leg's
+    # departure is when it ENDS.
+    direction: Literal["outbound", "return"] = "outbound"
+    # True when `price` is the fare for the WHOLE round trip (Atlas prices a
+    # round-trip routing as one figure). Both legs of such a routing carry the
+    # same value here, so summing them would double-count the fare.
+    price_is_round_trip: bool = False
 
 
 class FlightSearchRequest(BaseModel):
@@ -310,6 +279,9 @@ class FlightSearchRequest(BaseModel):
 class FlightChangeApplyRequest(BaseModel):
     session_id: str = "testing"
     output_path: Optional[str] = None
+    # Which end of the trip window moves is read from flight.direction — see the
+    # note on FlightOption.direction. There is deliberately no second
+    # `direction` field here, so the two can't disagree.
     flight: FlightOption
     trip_config: Optional[dict] = None
 

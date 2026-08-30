@@ -13,12 +13,12 @@ from pydantic import BaseModel, Field
 
 # Chat and Itinerary imports
 from agent import run_itinerary_agent
-from chat_agent import ChatEngine, ChatAction
+from chat_agent import ChatEngine
 from itinerary_repo import get_latest_itinerary, save_itinerary
 from itineraryPlanner import TripConfig, build_itinerary
 
 # Hotel, Flight, Activity, Tools, and Payment imports
-from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
+from hotels import search_mock_hotels, _parse_room_options
 from flights import get_flight_options
 from activities import get_activity_options
 from payment import create_trip_checkout_sessions, get_checkout_session_status
@@ -28,7 +28,7 @@ from schemas import (
     FlightSearchRequest, FlightChangeApplyRequest, FlightOption,
     ActivitySearchRequest,
 )
-from sponsored_hotel import SPONSORED_MOCK_HOTELS
+from sponsored_hotel import SPONSORED_MOCK_HOTELS, NOT_SPONSORED_MOCK_HOTELS, MOCK_ROOM_PRICES_RAW
 
 # ==========================================
 # Application Setup & Middleware
@@ -97,10 +97,10 @@ class HotelPriceLookupRequest(BaseModel):
     rooms: int
 
 # Payment Models
-class TripMemberInput(BaseModel):
-    id: str
-    name: str
-    isCurrentUser: bool = False
+# NOTE: the member shape lives in schemas.TripMemberInput (used by
+# CreateCheckoutSessionsRequest). There is deliberately no second copy here —
+# the local duplicate that used to sit at this spot was never referenced, so
+# editing it silently had no effect on the payment endpoint.
 
 # ==========================================
 # Chat Engine & State Helpers
@@ -352,6 +352,34 @@ async def saved_itinerary():
 # ==========================================
 # Endpoints: Hotel Modifications & Pricing
 # ==========================================
+def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, rooms: int) -> bool:
+    """Fetch per-room pricing for one hotel card and mutate it in place
+    (selected_room/available_rooms). Returns True if pricing was found.
+
+    Defined above both callers on purpose: /hotel/change used to inline a
+    byte-for-byte copy of this body in its backfill loop, so any fix to one
+    (e.g. the sort key, or which room is treated as selected) silently missed
+    the other.
+
+    Checks MOCK_ROOM_PRICES_RAW first — mock hotel_ids (sponsored-*, regular-*)
+    don't exist in real StayAPI and would just error there — then falls back
+    to get_hotel_prices_raw unchanged, so real hotel_ids keep working once
+    StayAPI access is restored. Either way the raw dict is run through the
+    same _parse_room_options() parser, untouched.
+    """
+    raw_prices = MOCK_ROOM_PRICES_RAW.get(card["hotel_id"])
+    if raw_prices is None:
+        raw_prices = get_hotel_prices_raw(card["hotel_id"], checkin, checkout, adults, rooms)
+        if "error" in raw_prices:
+            return False
+    parsed_rooms = _parse_room_options(raw_prices, checkin, checkout)
+    if not parsed_rooms:
+        return False
+    sorted_rooms = sorted(parsed_rooms, key=lambda r: r.total_price)
+    card["selected_room"] = sorted_rooms[0].model_dump()
+    card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+    return True
+
 @app.post("/hotel/change")
 async def change_hotel(req: HotelChangeRequest):
     logger.info(f"Received hotel change request: dest_id={req.dest_id} {req.checkin}->{req.checkout}")
@@ -373,23 +401,30 @@ async def change_hotel(req: HotelChangeRequest):
             children_ages=req.children_ages,
         )
 
-        sponsored = search_mock_hotels(search_params, SPONSORED_MOCK_HOTELS)
-        searched_cards = get_hotel_ui_cards(search_params)
+        # StayAPI is currently blocked, so /hotel/change is fully mocked:
+        # search_mock_hotels over SPONSORED_MOCK_HOTELS + NOT_SPONSORED_MOCK_HOTELS
+        # replaces the old get_hotel_ui_cards(search_params) call to the real
+        # search endpoint. Parsing is unchanged (search_mock_hotels already
+        # reads each item's price/coords/etc. the same way); the only fix
+        # needed there was per-item is_sponsored instead of a hardcoded True,
+        # so the combined list still splits correctly into featured/regular
+        # on the frontend.
+        all_mock_hotels = SPONSORED_MOCK_HOTELS + NOT_SPONSORED_MOCK_HOTELS
+        hotels = search_mock_hotels(search_params, all_mock_hotels)
+        cards = [h.model_dump() for h in hotels]
 
-        for card in searched_cards[: req.price_lookup_limit]:
-            raw_prices = get_hotel_prices_raw(
-                card["hotel_id"], req.checkin, req.checkout, req.adults, req.rooms
-            )
-            if "error" in raw_prices:
-                continue
-            rooms = _parse_room_options(raw_prices, req.checkin, req.checkout)
-            if not rooms:
-                continue
-            sorted_rooms = sorted(rooms, key=lambda r: r.total_price)
-            card["selected_room"] = sorted_rooms[0].model_dump()
-            card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
+        # Eagerly backfill available_rooms on every card (unlike the old real-
+        # StayAPI backfill loop, this doesn't need price_lookup_limit — it's a
+        # MOCK_ROOM_PRICES_RAW dict lookup, not a network call). Without this,
+        # each card's selected_room is already priced from search_mock_hotels
+        # but available_rooms stays empty, so the frontend's "hasPrice" check
+        # short-circuits before it ever calls fetchPriceFor — the ONLY thing
+        # that currently populates available_rooms — and the "View N room
+        # options" dropdown never has more than one room to show.
+        for card in cards:
+            _backfill_card_price(card, req.checkin, req.checkout, req.adults, req.rooms)
 
-        return {"hotels": [h.model_dump() for h in sponsored] + searched_cards}
+        return {"hotels": cards}
 
     except Exception as e:
         logger.error(f"Error searching hotels: {e}")
@@ -411,20 +446,6 @@ async def get_hotel_price_for_room(hotel_id: str, req: HotelPriceLookupRequest):
         raise HTTPException(status_code=404, detail="No room pricing available for this hotel and date range")
 
     return {"selected_room": card["selected_room"], "available_rooms": card["available_rooms"]}
-
-def _backfill_card_price(card: dict, checkin: str, checkout: str, adults: int, rooms: int) -> bool:
-    """Fetch real per-room pricing for one hotel card and mutate it in place
-    (selected_room/available_rooms). Returns True if pricing was found."""
-    raw_prices = get_hotel_prices_raw(card["hotel_id"], checkin, checkout, adults, rooms)
-    if "error" in raw_prices:
-        return False
-    parsed_rooms = _parse_room_options(raw_prices, checkin, checkout)
-    if not parsed_rooms:
-        return False
-    sorted_rooms = sorted(parsed_rooms, key=lambda r: r.total_price)
-    card["selected_room"] = sorted_rooms[0].model_dump()
-    card["available_rooms"] = [r.model_dump() for r in sorted_rooms[1:]]
-    return True
 
 # ==========================================
 # Endpoints: Flight Search & Change
@@ -456,8 +477,20 @@ async def apply_flight_change(req: FlightChangeApplyRequest):
     full_output = _read_json(path)
 
     overrides = dict(req.trip_config or {})
-    overrides["arrival_datetime"] = f"{req.flight.arrival.date}T{req.flight.arrival.time}:00"
-    overrides["departure_datetime"] = f"{req.flight.departure.date}T{req.flight.departure.time}:00"
+
+    def _leg_dt(seg) -> str:
+        return f"{seg.date}T{seg.time}:00"
+
+    # A FlightOption is ONE direction, so only ONE end of the trip window moves.
+    # This used to set arrival_datetime from flight.arrival AND
+    # departure_datetime from flight.departure of the same option — but on an
+    # outbound option `departure` is the take-off from the ORIGIN, which is
+    # earlier than the arrival. classify_days then derived
+    # end_time = departure_dt - 3h and collapsed the trip to a negative window.
+    if req.flight.direction == "return":
+        overrides["departure_datetime"] = _leg_dt(req.flight.departure)
+    else:
+        overrides["arrival_datetime"] = _leg_dt(req.flight.arrival)
 
     cfg = _build_trip_config(full_output, overrides)
     result = build_itinerary(cfg)
@@ -466,7 +499,16 @@ async def apply_flight_change(req: FlightChangeApplyRequest):
         raise HTTPException(status_code=502, detail=f"Replanning failed: {result['error']}")
 
     full_output["daily_itinerary"] = result
-    full_output["flights"] = [req.flight.model_dump()]
+
+    # Replace only the leg that changed. Assigning a single-element list here
+    # used to delete the other direction from the saved trip.
+    legs = list(full_output.get("flights") or [])
+    slot = 1 if req.flight.direction == "return" else 0
+    while len(legs) <= slot:
+        legs.append(None)
+    legs[slot] = req.flight.model_dump()
+    full_output["flights"] = [leg for leg in legs if leg is not None]
+
     _save_json(full_output, path)
 
     # Re-seed the chat session so subsequent chat edits build on the new schedule
@@ -535,6 +577,10 @@ class ItineraryItemInput(BaseModel):
     name: str
     location: Optional[dict[str, Any]] = None
     notes: Optional[str] = None
+    # Every planner-emitted schedule entry carries a duration, and the chat
+    # layer's re-scheduling reads it. Manually added entries used to omit it
+    # entirely, so a later chat edit treated them as zero-length stops.
+    duration_min: int = 60
 
 class UpdateItineraryItemRequest(BaseModel):
     session_id: str
@@ -568,6 +614,7 @@ async def update_itinerary_item(req: UpdateItineraryItemRequest):
             "name": req.item.name,
             "location": req.item.location,
             "notes": req.item.notes,
+            "duration_min": req.item.duration_min,
         }
         existing = next((i for i, s in enumerate(schedule) if s.get("_client_id") == req.item.id), None)
         if existing is not None:
@@ -578,6 +625,13 @@ async def update_itinerary_item(req: UpdateItineraryItemRequest):
 
     full_output = _read_json()
     normalized = _normalize_itinerary_payload(full_output, engine.state.display_itinerary)
+
+    # Persist. Without these two lines the mutation lived only in the in-memory
+    # engine: a page reload re-read the unchanged itinerary_output.json, and an
+    # "undo" in chat restored a snapshot that never contained the manual edit.
+    engine.store.save_snapshot(engine.state)
+    _save_json(normalized)
+
     return ChatResponse(response="Updated itinerary item.", session_id=req.session_id, itinerary=normalized)
 
 # ==========================================

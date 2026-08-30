@@ -121,6 +121,11 @@ TRAVEL_STYLE_CAPACITY = {
     "packed":   {"normal_min": 4, "normal_max": 8, "arrival": 3, "departure": 2},
 }
 
+# Absolute per-day attraction ceiling enforced by build_day_sequence. Derived
+# from the table above so it can never contradict the travel-style caps (it
+# used to be a bare literal 8 while MAX_PER_DAY said 7).
+HARD_MAX_PER_DAY = max(c["normal_max"] for c in TRAVEL_STYLE_CAPACITY.values())
+
 # FOR LOCAL SCORING (Maps Google's returned types to your UI categories)
 THEME_TO_TYPES = {
     "culture":       ["museum", "history_museum", "art_museum", "historical_place",
@@ -1121,13 +1126,14 @@ def find_meal_restaurant(meal_name: str, location: dict, cfg: TripConfig,
 
 
 def _entry_window(day: DayPlan, wp: dict):
+    # A waypoint may carry its own precomputed window (e.g. the mid-day hotel
+    # check-in, whose bounds come from cfg.check_in_time and so can't be
+    # derived here without the config).
+    if wp.get("entry_window"):
+        return wp["entry_window"]
+
     if wp["kind"] == "meal":
         return _meal_window_datetimes(day, wp.get("meal_name"))
-    
-    # Allow hotel check-in from check-in time onward
-    if wp["kind"] == "hotel_checkin":
-        cin_time = dtime(15, 0)
-        return (_combine_date_time(day.date, cin_time), _combine_date_time(day.date, dtime(22, 0)))
 
     place = wp.get("place")
     if not place:
@@ -1207,8 +1213,13 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
         order.append(best_i)
         unvisited.discard(best_i)
         cur = best_i
-        place = waypoints[best_i].get("place")
-        dur = wp.get("duration_min") if wp.get("duration_min") else (place.visit_duration_min if place else 60)
+        # NOTE: use the CHOSEN waypoint here. This used to read `wp`, which is
+        # the inner loop's leftover variable (the last candidate examined, not
+        # the one picked), so cur_time advanced by the wrong stop's duration
+        # and every downstream meal-window decision drifted.
+        chosen = waypoints[best_i]
+        place = chosen.get("place")
+        dur = chosen.get("duration_min") or (place.visit_duration_min if place else 60)
         cur_time = best_entry + timedelta(minutes=dur)
 
     order.append(n - 1)
@@ -1220,9 +1231,10 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> None:
-    if len(day.attractions) > 8:
-        log.warning("Day %d has %d attractions. Truncating to 8.", day.day_index, len(day.attractions))
-        day.attractions = day.attractions[:8]
+    if len(day.attractions) > HARD_MAX_PER_DAY:
+        log.warning("Day %d has %d attractions. Truncating to %d.",
+                    day.day_index, len(day.attractions), HARD_MAX_PER_DAY)
+        day.attractions = day.attractions[:HARD_MAX_PER_DAY]
 
     # ── REPLACE FROM HERE ──
     if day.day_type == "departure":
@@ -1291,7 +1303,10 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
             "location": dict(cfg.hotel),
             "kind": "hotel_checkin",
             "duration_min": 45,
-            "place": None
+            "place": None,
+            # Can't be entered before the hotel's actual check-in time; keep the
+            # bound tied to cfg instead of a hardcoded 15:00 inside _entry_window.
+            "entry_window": (check_in_dt, base_d.replace(hour=22, minute=0)),
         })
 
     waypoints.extend(meal_waypoints)
@@ -1333,8 +1348,24 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
     prev = dict(cfg.hotel)
     spd = _SPEED.get(cfg.transport_mode, 30)
 
-    # ── FIX: Baseline target date for safe meal clamping ──
-    target_date = datetime.strptime(day.date, "%Y-%m-%d")
+    # The day's FIRST waypoint used to be skipped entirely by the slice below,
+    # which silently dropped the arrival day's "Arrive & Check-in" beat and,
+    # worse, ignored its duration — so the first attraction of an arrival day
+    # was scheduled 45 minutes earlier than it can actually be reached.
+    # Only emit it when it actually consumes time (0 on normal/departure days,
+    # where "Leave Hotel" is just the route's origin).
+    first_wp = day.sequence[0] if day.sequence else None
+    first_dur = (first_wp.get("duration_min") or 0) if first_wp else 0
+    if first_dur > 0:
+        schedule.append({
+            "name": first_wp["name"], "kind": first_wp["kind"],
+            "arrival": cur, "depart": cur + timedelta(minutes=first_dur),
+            "travel_sec": 0, "duration_min": first_dur,
+            "location": first_wp["location"],
+            "rating": None, "price_level": None, "opening_hours": [],
+        })
+        cur += timedelta(minutes=first_dur)
+        prev = first_wp["location"]
 
     for wp in day.sequence[1:-1]:
         loc = wp["location"]

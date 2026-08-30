@@ -1,8 +1,7 @@
 """
 chat_agent.py — the full post-creation chatbot layer consolidated into ONE file.
 
-This is a straight merge of the original six modules, in dependency order,
-with NO behavioral changes:
+This is a merge of the original modules, in dependency order:
 
     chat_schemas.py       -> Section 1: data models (ChatAction, IntentResult,
                                        ChatMessage, HandlerResult)
@@ -12,25 +11,25 @@ with NO behavioral changes:
                                        (SessionStore, ChatHistoryManager,
                                        serialization helpers)
     action_handlers.py    -> Section 4: deterministic action executors
-    chat_engine.py        -> Section 5: ChatEngine orchestrator + demo REPL
-    test_chat_features.py -> Section 6: offline feature tests (unittest)
+    chat_engine.py        -> Section 5: ChatEngine orchestrator
 
-Why one file still behaves like six:
-* Every original module name is registered in sys.modules at the bottom of
-  this file (see BACKWARD COMPATIBILITY), so existing code such as
-  `from chat_engine import ChatEngine`, `import chat_state` or
-  `from chat_schemas import ChatAction` keeps working unchanged.
-* unittest.mock.patch() targets like "intent_classifier.chat_llm" or
-  "chat_state.build_state_from_output" also keep working, because the merged
-  functions resolve those names through the module globals at call time.
+Importing from this module:
+* Use `chat_agent` — e.g. `from chat_agent import ChatEngine, ChatAction`.
+* The original module names are NOT registered in sys.modules, so
+  `from chat_engine import ChatEngine` or a patch target like
+  "intent_classifier.chat_llm" raises ModuleNotFoundError. Patch
+  "chat_agent.chat_llm" / "chat_agent.build_state_from_output" instead; those
+  work because the merged functions resolve cross-section names through this
+  module's globals at call time.
 
 Only external dependency: `itineraryPlanner` (the planner itself is NOT
 part of this merge and stays untouched).
 
-Run the interactive demo directly:
-    python chat.py
-Run the tests directly:
-    python chat.py --test
+This file is a library — it has no __main__ block, so running it directly does
+nothing. An earlier version of this docstring advertised a "Section 6: offline
+feature tests", an interactive demo REPL, and `python chat.py [--test]`; none of
+those exist here. The only thing `--test` still does is stub the API keys in
+os.environ (see below) so an offline importer can load itineraryPlanner.
 """
 
 import json
@@ -67,7 +66,10 @@ DEFAULT_SESSIONS_ROOT = os.path.join(
 
 VALID_TRANSPORT_MODES = {"DRIVE", "TRANSIT", "WALK", "BICYCLE"}
 MEAL_SLOTS = ("breakfast", "lunch", "dinner")
-MAX_ATTRACTIONS_PER_DAY = 8          # mirrors build_day_sequence's safety cap
+# Derived from the planner rather than hardcoded: this was a literal 8 that
+# "mirrored" build_day_sequence's cap by hand, so the two could silently drift
+# (and did — the planner's own MAX_PER_DAY said 7).
+MAX_ATTRACTIONS_PER_DAY = ip.HARD_MAX_PER_DAY
 NAME_MATCH_THRESHOLD = 0.45
 DUPLICATE_THRESHOLD = 0.8
 BANNED_PRIMARY_TYPES = {"restaurant", "cafe", "bar", "lodging", "hotel"}
@@ -1285,6 +1287,22 @@ ACTION_DISPATCH = {
     ChatAction.UNDO: handle_undo,
 }
 
+# Intents the classifier prompt still advertises, but whose handlers are
+# currently commented out above. Without this table they fell through the
+# ACTION_DISPATCH.get(..., handle_question) default, so "let's drive instead"
+# got answered as if it were a question about the itinerary and the user was
+# never told that nothing had actually changed.
+UNSUPPORTED_ACTIONS = {
+    ChatAction.CHANGE_TRANSPORT: (
+        "Changing the transport mode isn't supported in chat yet — the whole "
+        "trip has to be re-planned for that. Regenerate the trip with the "
+        "transport mode you want, and I'll work from there."),
+    ChatAction.UPDATE_PREFERENCES: (
+        "I can't retune your interests mid-trip yet. In the meantime I can "
+        "rebuild a single day around a theme — try \"redo day 2 with more "
+        "shopping\"."),
+}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 5 — Orchestrator (was chat_engine.py)
@@ -1345,6 +1363,12 @@ class ChatEngine:
         context = self.history.build_context(self.state)
         intent = classify_intent(text, context)
         intent.message = text
+
+        if intent.action in UNSUPPORTED_ACTIONS:
+            response = UNSUPPORTED_ACTIONS[intent.action]
+            self.history.add_message("assistant", response)
+            return response
+
         handler = ACTION_DISPATCH.get(intent.action, handle_question)
 
         try:
