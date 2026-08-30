@@ -191,59 +191,64 @@ The user already has a generated itinerary and is asking to inspect or modify it
 Classify the LAST user message into exactly ONE action and extract its parameters.
 
 Actions and parameter schemas:
-- QUESTION            {"day": <0-based int, optional>}                  — any question / smalltalk / unclear request
-- ADD_PLACE           {"place_name": str, "day": <0-based int>}         — add a specific place to a day
-- REMOVE_PLACE        {"place_name": str, "day": <0-based int, optional>} — remove a place or a meal ("lunch"/"dinner"/"breakfast")
-- REPLACE_PLACE       {"place_name": str, "category": str, "day": <0-based int, optional>} — swap a place for something similar; category is one of culture/scenery/food/shopping/entertainment/adventure/wellness/city
+- QUESTION            {"day": <1-based int, optional>}                  — any question / smalltalk / unclear request
+- ADD_PLACE           {"place_name": str, "day": <1-based int>}         — add a specific place to a day
+- REMOVE_PLACE        {"place_name": str, "day": <1-based int, optional>} — remove a place or a meal ("lunch"/"dinner"/"breakfast")
+- REPLACE_PLACE       {"place_name": str, "category": str, "day": <1-based int, optional>} — swap a place for something similar; category is one of culture/scenery/food/shopping/entertainment/adventure/wellness/city
 - CHANGE_TRANSPORT    {"new_transport": "DRIVE"|"TRANSIT"|"WALK"|"BICYCLE"}
-- CHANGE_SCHEDULE     {"day": <0-based int>, "new_start_time": "HH:MM", "new_end_time": "HH:MM"} — either time optional
-- REPLAN_DAY          {"day": <0-based int>, "theme": str optional, "pacing": str optional} — rebuild one day from scratch
+- CHANGE_SCHEDULE     {"day": <1-based int>, "new_start_time": "HH:MM", "new_end_time": "HH:MM"} — either time optional
+- REPLAN_DAY          {"day": <1-based int>, "theme": str optional, "pacing": str optional} — rebuild one day from scratch
 - UPDATE_PREFERENCES  {"preferences": [str, ...]}                       — user states new interests
 - REGENERATE_TRIP     {}                                                — rebuild the entire trip
 - UNDO                {}                                                — revert the last change
 
 Day resolution rules:
-- The context lists each itinerary day as index/date/type. "day 1" or "the first day" means index 0, "day 2" means index 1, etc.
-- A date like "September 2nd" must be resolved to the matching index using the context dates.
+- Extract the exact day number the user mentions (e.g., "day 2" means 2).
+- A date like "September 2nd" must be resolved to the matching day number using the context dates.
 
 Few-shot examples:
 - "Replace Meiji Jingu with another shrine" -> {"action": "REPLACE_PLACE", "params": {"place_name": "Meiji Jingu", "category": "culture"}}
-- "Add Tokyo Skytree to day 2" -> {"action": "ADD_PLACE", "params": {"place_name": "Tokyo Skytree", "day": 1}}
-- "Remove lunch on the last day" -> {"action": "REMOVE_PLACE", "params": {"place_name": "lunch", "day": <last index>}}
+- "Add Tokyo Skytree to day 2" -> {"action": "ADD_PLACE", "params": {"place_name": "Tokyo Skytree", "day": 2}}
+- "Remove lunch on the last day" -> {"action": "REMOVE_PLACE", "params": {"place_name": "lunch", "day": <last day number>}}
 - "Let's drive instead" -> {"action": "CHANGE_TRANSPORT", "params": {"new_transport": "DRIVE"}}
-- "Start day 2 at 10am" -> {"action": "CHANGE_SCHEDULE", "params": {"day": 1, "new_start_time": "10:00"}}
-- "Day 2 is boring, redo it with more nature and keep it relaxed" -> {"action": "REPLAN_DAY", "params": {"day": 1, "theme": "scenery", "pacing": "relaxed"}}
+- "Start day 2 at 10am" -> {"action": "CHANGE_SCHEDULE", "params": {"day": 2, "new_start_time": "10:00"}}
+- "Day 2 is boring, redo it with more nature and keep it relaxed" -> {"action": "REPLAN_DAY", "params": {"day": 2, "theme": "scenery", "pacing": "relaxed"}}
 - "I'm actually really into shopping" -> {"action": "UPDATE_PREFERENCES", "params": {"preferences": ["shopping"]}}
-- "What am I doing on day 2?" -> {"action": "QUESTION", "params": {"day": 1}}
+- "What am I doing on day 2?" -> {"action": "QUESTION", "params": {"day": 2}}
 - "undo that" -> {"action": "UNDO", "params": {}}
 
 Return JSON ONLY: {"action": "<ACTION>", "params": {...}}"""
 
 
 def _resolve_day_param(params: dict, context: dict):
-    """Coerce params['day'] to a valid 0-based int where possible: ints pass
-    through, date strings are matched against the itinerary dates from the
-    context. Unresolvable values are left for the handler's precondition
-    checks (which reply with a clarification instead of mutating)."""
     if "day" not in params:
         return
     raw = params["day"]
     itinerary = context.get("itinerary", []) if isinstance(context, dict) else []
+
     if isinstance(raw, bool):
         params.pop("day")
         return
+
+    day_num = None
     if isinstance(raw, int):
-        return
-    if isinstance(raw, str):
+        day_num = raw
+    elif isinstance(raw, str):
         raw = raw.strip()
         for d in itinerary:
             if raw == d.get("date"):
-                params["day"] = d.get("day")
-                return
-        m = re.fullmatch(r"\d+", raw)
-        if m:
-            params["day"] = int(raw)
-            return
+                day_num = d.get("day")
+                break
+        if day_num is None:
+            m = re.fullmatch(r"\d+", raw)
+            if m:
+                day_num = int(raw)
+
+    if day_num is not None:
+        # Convert 1-based human day number back to 0-based Python index
+        params["day"] = day_num - 1
+        return
+
     params.pop("day", None)
 
 
@@ -613,7 +618,7 @@ class ChatHistoryManager:
         if state is not None:
             ctx["itinerary"] = [
                 {
-                    "day": d.day_index,
+                    "day": d.day_index + 1,
                     "date": d.date,
                     "type": d.day_type,
                     "attractions": [p.name for p in d.attractions],
@@ -691,15 +696,16 @@ _log_handlers = logging.getLogger("chat.handlers")
 # ── Common helpers ────────────────────────────────────────────────────────────
 
 
-def _rebuild_and_validate(day, cfg, used_restaurants, backups=None) -> bool:
+def _rebuild_and_validate(day, cfg, used_restaurants, backups=None, allow_repair=False) -> bool:
     """build_day_sequence -> validate_day. 
-    Auto-repair disabled so the user maintains full manual control."""
+    Auto-repair disabled by default so the user maintains full manual control,
+    but can be enabled for bulk operations like Replan Day."""
     ip.build_day_sequence(day, cfg, used_restaurants)
     ok, _viols = ip.validate_day(day)
     
-    # Disable the aggressive auto-repair
-    # if not ok:
-    #     ip.deterministic_repair(day, cfg, backups or [], used_restaurants)
+    # Only trigger the aggressive auto-repair if explicitly allowed
+    if not ok and allow_repair:
+        ip.deterministic_repair(day, cfg, backups or [], used_restaurants)
         
     return day.valid
 
@@ -798,7 +804,7 @@ def _compact_itinerary(state: SessionState) -> list:
                 for entry in day.schedule
             ]
         itinerary.append({
-            "day": day.day_index,
+            "day": day.day_index + 1,
             "date": day.date,
             "type": day.day_type,
             "schedule": schedule,

@@ -17,8 +17,37 @@ from chat_agent import ChatEngine
 from itinerary_repo import get_latest_itinerary, save_itinerary
 from itineraryPlanner import TripConfig, build_itinerary
 
-# Hotel, Flight, Activity, Tools, and Payment imports
-from hotels import search_mock_hotels, _parse_room_options
+# Route helpers (imported with guard so server starts even without env keys)
+try:
+    from itineraryPlanner import (
+        GOOGLE_MAPS_API_KEY as _GOOGLE_MAPS_API_KEY,
+        _safe_post as _route_safe_post,
+        parse_dur as _route_parse_dur,
+    )
+except Exception:
+    _GOOGLE_MAPS_API_KEY = None
+    _route_safe_post = None
+    _route_parse_dur = None
+
+import math as _math
+
+def _local_haversine_km(a: dict, b: dict) -> float:
+    """Haversine distance in km — local backup if itineraryPlanner import fails."""
+    lat1, lon1 = _math.radians(a["latitude"]), _math.radians(a["longitude"])
+    lat2, lon2 = _math.radians(b["latitude"]), _math.radians(b["longitude"])
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    c = 2 * _math.asin(_math.sqrt(
+        _math.sin(dlat / 2) ** 2 +
+        _math.cos(lat1) * _math.cos(lat2) * _math.sin(dlon / 2) ** 2))
+    return 6371 * c
+
+try:
+    from itineraryPlanner import haversine_km as _haversine_km
+except Exception:
+    _haversine_km = _local_haversine_km
+
+# Hotel, Tools, and Payment imports
+from hotels import search_mock_hotels, get_hotel_ui_cards, _parse_room_options
 from flights import get_flight_options
 from activities import get_activity_options
 from payment import create_trip_checkout_sessions, get_checkout_session_status
@@ -68,6 +97,29 @@ async def log_requests(request: Request, call_next):
         elapsed_ms,
     )
     return response
+
+# ==========================================
+# Pydantic Models: Route Recalculation
+# ==========================================
+class RouteWaypoint(BaseModel):
+    id: str
+    lat: float
+    lng: float
+
+class RecalculateRouteRequest(BaseModel):
+    waypoints: list[RouteWaypoint]
+    mode: str = "TRANSIT"
+
+class RouteLeg(BaseModel):
+    fromId: str
+    toId: str
+    durationMinutes: float
+    distanceMeters: float
+    mode: str          # "walk" | "subway" | "bus" | "taxi"
+    estimated: bool
+
+class RecalculateRouteResponse(BaseModel):
+    legs: list[RouteLeg]
 
 # ==========================================
 # Pydantic Models
@@ -238,10 +290,10 @@ def _build_trip_config(
         "start_date": start_date,
         "end_date": end_date,
         "arrival_datetime": f"{start_date}T08:00:00",
-        "departure_datetime": f"{end_date}T21:00:00",
+        "departure_datetime": f"{end_date}T22:00:00",
         "hotel": generated_hotel,
         "airport": {},
-        "travel_style": "moderate",
+        "travel_style": "packed",
         "transport_mode": "TRANSIT",
         "group_size": 2,
         "budget": "medium",
@@ -633,6 +685,190 @@ async def update_itinerary_item(req: UpdateItineraryItemRequest):
     _save_json(normalized)
 
     return ChatResponse(response="Updated itinerary item.", session_id=req.session_id, itinerary=normalized)
+
+# ==========================================
+# Endpoint: Route Recalculation
+# ==========================================
+_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+
+_BUS_TYPES = {"BUS", "INTERCITY_BUS", "TROLLEYBUS"}
+
+def _map_transit_mode(step_type: str) -> str:
+    """Map a Google Routes transit step type to the frontend mode string."""
+    upper = (step_type or "").upper()
+    if upper in _BUS_TYPES:
+        return "bus"
+    return "subway"
+
+def _google_route_leg(
+    origin: dict, destination: dict, travel_mode: str
+) -> dict | None:
+    """Call Google Routes API for a single origin→destination pair.
+    Returns parsed leg dict on success, None on any failure."""
+    if not _GOOGLE_MAPS_API_KEY or _route_safe_post is None:
+        return None
+    payload = {
+        "origin": {"location": {"latLng": {"latitude": origin["lat"], "longitude": origin["lng"]}}},
+        "destination": {"location": {"latLng": {"latitude": destination["lat"], "longitude": destination["lng"]}}},
+        "travelMode": travel_mode,
+    }
+    if travel_mode == "TRANSIT":
+        payload["transitPreferences"] = {"routingPreference": "LESS_WALKING"}
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": _GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "routes.legs.navigationInstruction,routes.legs.steps.navigationInstruction,routes.legs.steps.travelMode,routes.legs.steps.transitDetails,routes.legs.localizedValues",
+    }
+    resp = _route_safe_post(_ROUTES_URL, headers=headers, json_payload=payload)
+    if resp is None or resp.status_code != 200:
+        return None
+    try:
+        data = resp.json()
+    except Exception:
+        return None
+    routes = data.get("routes")
+    if not routes:
+        return None
+    legs = routes[0].get("legs")
+    if not legs:
+        return None
+    return legs[0]
+
+def _fallback_leg(wp_a: RouteWaypoint, wp_b: RouteWaypoint) -> RouteLeg:
+    """Haversine-based fallback when the Routes API is unavailable or fails."""
+    dist_km = _haversine_km(
+        {"latitude": wp_a.lat, "longitude": wp_a.lng},
+        {"latitude": wp_b.lat, "longitude": wp_b.lng},
+    )
+    dist_m = dist_km * 1000
+    if dist_m <= 1200:
+        dur_min = dist_m / 80.0  # 80 m/min walking
+        mode = "walk"
+    else:
+        dur_min = (dist_km / 30.0) * 60 + 10  # 30 km/h + 10 min overhead
+        mode = "subway"
+    return RouteLeg(
+        fromId=wp_a.id, toId=wp_b.id,
+        durationMinutes=round(dur_min, 1),
+        distanceMeters=round(dist_m, 0),
+        mode=mode, estimated=True,
+    )
+
+@app.post("/api/recalculate-route", response_model=RecalculateRouteResponse)
+async def recalculate_route(req: RecalculateRouteRequest):
+    waypoints = req.waypoints
+    if len(waypoints) < 2:
+        return RecalculateRouteResponse(legs=[])
+
+    travel_mode = (req.mode or "TRANSIT").upper()
+    legs: list[RouteLeg] = []
+
+    for i in range(len(waypoints) - 1):
+        wp_a, wp_b = waypoints[i], waypoints[i + 1]
+        dist_km = _haversine_km(
+            {"latitude": wp_a.lat, "longitude": wp_a.lng},
+            {"latitude": wp_b.lat, "longitude": wp_b.lng},
+        )
+        dist_m = dist_km * 1000
+
+        # Short distance → always walk
+        if dist_m <= 1200:
+            leg_data = _google_route_leg(
+                {"lat": wp_a.lat, "lng": wp_a.lng},
+                {"lat": wp_b.lat, "lng": wp_b.lng},
+                "WALK",
+            )
+            if leg_data:
+                try:
+                    dur_str = leg_data.get("localizedValues", {}).get("duration", {}).get("text", "")
+                    dur_min = _route_parse_dur(dur_str) if _route_parse_dur else 0
+                    if dur_min <= 0:
+                        dur_min = dist_m / 80.0
+                    dist_val = leg_data.get("localizedValues", {}).get("distance", {}).get("text", "")
+                    # Parse distance text like "1.2 km" or "800 m"
+                    import re as _re
+                    dist_match = _re.search(r"([\d.]+)\s*(km|m)", str(dist_val))
+                    if dist_match:
+                        real_dist = float(dist_match.group(1))
+                        if dist_match.group(2) == "km":
+                            real_dist *= 1000
+                    else:
+                        real_dist = dist_m
+                    legs.append(RouteLeg(
+                        fromId=wp_a.id, toId=wp_b.id,
+                        durationMinutes=round(dur_min, 1),
+                        distanceMeters=round(real_dist, 0),
+                        mode="walk", estimated=False,
+                    ))
+                    continue
+                except Exception:
+                    pass
+            # Fallback for walk
+            dur_min = dist_m / 80.0
+            legs.append(RouteLeg(
+                fromId=wp_a.id, toId=wp_b.id,
+                durationMinutes=round(dur_min, 1),
+                distanceMeters=round(dist_m, 0),
+                mode="walk", estimated=True,
+            ))
+            continue
+
+        # Longer distance → use requested travel mode
+        leg_data = _google_route_leg(
+            {"lat": wp_a.lat, "lng": wp_a.lng},
+            {"lat": wp_b.lat, "lng": wp_b.lng},
+            travel_mode,
+        )
+        if leg_data:
+            try:
+                dur_str = leg_data.get("localizedValues", {}).get("duration", {}).get("text", "")
+                dur_min = _route_parse_dur(dur_str) if _route_parse_dur else 0
+                if dur_min <= 0:
+                    dur_min = (dist_km / 30.0) * 60 + 10
+
+                dist_val = leg_data.get("localizedValues", {}).get("distance", {}).get("text", "")
+                import re as _re
+                dist_match = _re.search(r"([\d.]+)\s*(km|m)", str(dist_val))
+                if dist_match:
+                    real_dist = float(dist_match.group(1))
+                    if dist_match.group(2) == "km":
+                        real_dist *= 1000
+                else:
+                    real_dist = dist_m
+
+                # Determine mode from steps
+                steps = leg_data.get("steps", [])
+                mode = "subway"  # default for transit
+                if travel_mode == "DRIVE":
+                    mode = "taxi"
+                else:
+                    for step in steps:
+                        step_mode = (step.get("travelMode") or "").upper()
+                        transit = step.get("transitDetails", {})
+                        vehicle = (transit.get("transitLine", {}).get("vehicle", {}).get("type") or "").upper() if transit else ""
+                        if vehicle in _BUS_TYPES or step_mode == "BUS":
+                            mode = "bus"
+                            break
+                        elif step_mode == "WALK":
+                            continue  # skip walk steps for mode detection
+                        elif step_mode in ("SUBWAY", "RAIL", "TRAM", "FERRY"):
+                            mode = "subway"
+                            break
+
+                legs.append(RouteLeg(
+                    fromId=wp_a.id, toId=wp_b.id,
+                    durationMinutes=round(dur_min, 1),
+                    distanceMeters=round(real_dist, 0),
+                    mode=mode, estimated=False,
+                ))
+                continue
+            except Exception:
+                pass
+
+        # Fallback for transit
+        legs.append(_fallback_leg(wp_a, wp_b))
+
+    return RecalculateRouteResponse(legs=legs)
 
 # ==========================================
 # Run Server

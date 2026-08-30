@@ -94,7 +94,9 @@ def run_itinerary_agent(user_request: str, custom_messages: str = "") -> str:
            output schema needs both stamped onto that hotel (dest_id/dest_type fields) so the frontend can search
            that same destination again later if the user wants to change hotels.
         3. Search for places using the places search tools.
-        4. Call the `plan_itinerary` tool, passing in the flight and hotel parameters, as well as user preferences.
+        4. Call the `plan_itinerary` tool, passing in the flight and hotel parameters, as well as user preferences. 
+           CRITICAL: YOU MUST strictly map the outbound flight's exact arrival time to the `arrival_datetime` parameter, 
+           and the return flight's exact departure time to the `departure_datetime` parameter. Do not invent default times (like 10:00 AM).
         5. Combine the generated itinerary with the flights and hotel data to structure the output.
         Once you have gathered the necessary information, formulate your final answer so it can be parsed into the `ItineraryPlan` schema.
         Ensure you look up real flights and real places using your tools. The price and currency must follow back the tool responses.

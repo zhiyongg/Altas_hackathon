@@ -83,7 +83,7 @@ MEAL_TARGETS = {
 MEAL_WINDOWS = {
     "breakfast": (dtime(6, 30), dtime(10, 30)),
     "lunch":     (dtime(11, 0), dtime(15, 0)),
-    "dinner":    (dtime(17, 30), dtime(21, 30)),
+    "dinner":    (dtime(18, 30), dtime(21, 30)),
 }
 
 # How far we are willing to move from the preferred meal time
@@ -189,7 +189,27 @@ def parse_dur(s) -> int:
     return int(re.sub(r"[^\d]", "", str(s)) or 0)
 
 def parse_dt(s: str) -> datetime:
-    return datetime.fromisoformat(s)
+    if not s:
+        # Fallback to prevent crash if the LLM passed None/empty
+        return datetime.now()
+        
+    # Fix common LLM string hallucinations (e.g., replacing spaces with 'T')
+    clean_s = str(s).strip().replace(" ", "T")
+    
+    # Remove trailing 'Z' if the LLM appended a UTC marker
+    if clean_s.endswith("Z"):
+        clean_s = clean_s[:-1]
+        
+    try:
+        return datetime.fromisoformat(clean_s)
+    except ValueError:
+        # Fallback if the LLM only provided 'YYYY-MM-DD' and dropped the time
+        match = re.search(r'\d{4}-\d{2}-\d{2}', clean_s)
+        if match:
+            return datetime.strptime(match.group(), "%Y-%m-%d")
+            
+        # Absolute fallback to prevent a hard pipeline crash
+        return datetime.now()
 
 def fmt_time(dt: datetime) -> str:
     return dt.strftime("%H:%M")
@@ -487,6 +507,7 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
             # Start touring at 8 AM, OR the check-out time (whichever is earlier)
             start_time = min(default_start, checkout_dt)
             end_time = departure_dt - timedelta(hours=3)
+            
         else:
             start_time = base.replace(hour=8, minute=0)
             end_time = base.replace(hour=21, minute=0)
@@ -544,18 +565,12 @@ def classify_days(cfg: TripConfig) -> list[DayPlan]:
 
 
 def get_meal_slots(dp: DayPlan) -> list[tuple]:
-    """
-    Universally calculates applicable meal slots based on the day's
-    actual start and end times (derived from arrival/departure/normal schedules).
-    Returns [(meal_name, target_datetime, context_label), ...]
-    """
     slots = []
     base = datetime.strptime(dp.date, "%Y-%m-%d")
 
     start_t = dp.start_time.time()
     end_t = dp.end_time.time()
 
-    # Standard meal target datetimes
     b_time = base.replace(hour=8, minute=0)
     l_time = base.replace(hour=12, minute=30)
     d_time = base.replace(hour=18, minute=30)
@@ -564,17 +579,18 @@ def get_meal_slots(dp: DayPlan) -> list[tuple]:
     if start_t <= dtime(9, 0):
         slots.append(("breakfast", b_time, "hotel"))
 
-    # 2. Lunch: Included if the user is active through the midday window (12:30 - 13:30)
+    # 2. Lunch: Included if active through midday
     if start_t <= dtime(12, 30) and end_t >= dtime(13, 30):
         slots.append(("lunch", l_time, "attraction"))
 
-    # 3. Dinner: Included if the day extends past 6:30 PM
-    if end_t >= dtime(18, 30):
-        # If it's an arrival day ending late, eat near hotel; otherwise near attractions
+    # 3. Dinner: Force included on normal days or if day extends past 19:30
+    # ── FIX: Changed from 18:00 to 19:30 to prevent impossible overlapping on departure days ──
+    if end_t >= dtime(19, 30) or dp.day_type == "normal":
         context = "hotel" if dp.day_type == "arrival" else "attraction"
         slots.append(("dinner", d_time, context))
 
     return slots
+    
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STAGE 2 — CANDIDATE DISCOVERY
@@ -619,7 +635,7 @@ def _get_dynamic_duration(place_types: list[str], primary: str, travel_style: st
 
     return base
 
-def _raw_to_place(raw: dict, source="api", travel_style: str = "moderate") -> Place | None:
+def _raw_to_place(raw: dict, source="api", travel_style: str = "packed") -> Place | None:
     loc = raw.get("location", {})
     if not loc.get("latitude"): return None
 
@@ -1107,15 +1123,26 @@ def find_meal_restaurant(meal_name: str, location: dict, cfg: TripConfig,
         if not _is_valid_restaurant(r, used_restaurants):
             continue
             
-        # ── PREVENT BREAKFAST DELAY BUG ──
-        if meal_name == "breakfast" and date_str:
+        if date_str:
             win = get_opening_window(r, date_str)
             if win == "CLOSED":
                 continue
             if win:
-                # If cafe opens at 10:00 AM or later, reject it for breakfast
                 open_hour = int(win[0].split(":")[0])
-                if open_hour >= 10:
+                close_hour = int(win[1].split(":")[0])
+                close_min = int(win[1].split(":")[1])
+                
+                # Prevent Breakfast Delay Bug
+                if meal_name == "breakfast" and open_hour >= 10:
+                    continue
+                    
+                # ── FIX: Prevent Closed-on-Arrival Bug ──
+                lo_time = MEAL_WINDOWS[meal_name][0]
+                close_t = dtime(close_hour, close_min)
+                open_t = dtime(open_hour, int(win[0].split(":")[1]))
+                
+                # If it closes on the same day, reject it if it closes before/at window start
+                if close_t > open_t and close_t <= lo_time:
                     continue
                     
         valid_candidates.append(r)
@@ -1195,13 +1222,14 @@ def _optimize_route_temporal(waypoints: list[dict], matrix: DayRouteMatrix, day:
                 if entry > hi:
                     penalty += 1e7  # Missed window
                 
-                # 3. MEAL GRAVITY: Force optimizer to eat if inside the window
-                if wp.get("kind") == "meal" and lo <= entry <= hi:
-                    time_left = (hi - entry).total_seconds()
+                # 3. MEAL GRAVITY: Force optimizer to eat if naturally inside the window
+                # ── FIX: Use 'arrival' instead of 'entry' so it doesn't pull meals from the future ──
+                if wp.get("kind") == "meal" and lo <= arrival <= hi:
+                    time_left = (hi - arrival).total_seconds()
                     if time_left < 7200: # Less than 2 hours left -> Extreme Priority
                         penalty -= 1e6 
                     else: # Inside window -> High Priority
-                        penalty -= 50000 
+                        penalty -= 50000
 
             cost = (entry - cur_time).total_seconds() + penalty
             if cost < best_cost:
@@ -1276,42 +1304,51 @@ def build_day_sequence(day: DayPlan, cfg: TripConfig, used_restaurants: set) -> 
     check_in_dt = base_d.replace(hour=cin_time.hour, minute=cin_time.minute)
 
     start_duration = 0
+    has_explicit_checkin = False
+
     if day.day_type == "arrival":
+        end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
         if day.start_time >= check_in_dt:
-            # Arrive after check-in opens -> check in immediately
             start_name = f"Arrive & Check-in ({cfg.hotel.get('name', '')})"
-            start_duration = 45 
+            start_duration = 45
+            has_explicit_checkin = True
         else:
-            # Arrive early -> drop bags now, check-in later mid-day
             start_name = f"Arrive & Drop Luggage ({cfg.hotel.get('name', '')})"
             start_duration = 15
     elif day.day_type == "departure":
-        start_name = f"Check-out & Leave Bags ({cfg.hotel.get('name', '')})"
+        start_name = f"Leave Hotel & Drop Bags ({cfg.hotel.get('name', '')})"
+        end_name = "Pick Up Bags & Depart for Airport"
     else:
         start_name = f"Leave Hotel ({cfg.hotel.get('name', '')})"
+        end_name = f"Return to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints = [{"name": start_name, "location": dict(cfg.hotel), "kind": "hotel", "duration_min": start_duration}]
-    
-    for p in day.attractions:
-        waypoints.append({"name": p.name, "location": dict(p.location),
-                          "kind": "attraction", "place": p})
 
-    # Mid-day check-in (Only if we arrived early and crossed the threshold)
-    if day.day_type == "arrival" and day.start_time < check_in_dt < day.end_time:
-        waypoints.append({
-            "name": f"Hotel Check-in ({cfg.hotel.get('name', '')})",
-            "location": dict(cfg.hotel),
-            "kind": "hotel_checkin",
-            "duration_min": 45,
-            "place": None,
+    for p in day.attractions:
+        waypoints.append({"name": p.name, "location": dict(p.location), "kind": "attraction", "place": p})
+
+    # Handle mid-day check-in or evening check-in fallback
+    if day.day_type == "arrival" and not has_explicit_checkin:
+        if day.start_time < check_in_dt < day.end_time:
+            waypoints.append({
+                "name": f"Hotel Check-in ({cfg.hotel.get('name', '')})",
+                "location": dict(cfg.hotel),
+                "kind": "hotel_checkin",
+                "duration_min": 45,
+                "place": None,
             # Can't be entered before the hotel's actual check-in time; keep the
             # bound tied to cfg instead of a hardcoded 15:00 inside _entry_window.
             "entry_window": (check_in_dt, base_d.replace(hour=22, minute=0)),
-        })
+            })
+            has_explicit_checkin = True
+
+        # If no mid-day check-in was added, force the final node to reflect the check-in
+        if not has_explicit_checkin:
+            end_name = f"Return & Check-in to Hotel ({cfg.hotel.get('name', '')})"
 
     waypoints.extend(meal_waypoints)
     waypoints.append({"name": end_name, "location": dict(cfg.hotel), "kind": "hotel"})
-    
+
     # 4. ONE route matrix over all waypoints (controls API usage)
     matrix = DayRouteMatrix(cfg, waypoints)
     order = _optimize_route_temporal(waypoints, matrix, day)
@@ -1367,75 +1404,59 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         cur += timedelta(minutes=first_dur)
         prev = first_wp["location"]
 
-    for wp in day.sequence[1:-1]:
+    # FIX: Loop from 0 to capture the start waypoint (Check-in / Leave Hotel)
+    for i, wp in enumerate(day.sequence[:-1]):
         loc = wp["location"]
-        travel_s = wp.get("travel_sec_from_prev", int(haversine_km(prev, loc) / spd * 3600))
-        arrival = cur + timedelta(seconds=travel_s)
 
-        # ── FIX: Absolute Datetime comparisons + gap from previous meal ──
+        # At index 0, you are already at the hotel; no travel time needed.
+        if i == 0:
+            travel_s = 0
+            arrival = cur
+        else:
+            travel_s = wp.get("travel_sec_from_prev", int(haversine_km(prev, loc) / spd * 3600))
+            arrival = cur + timedelta(seconds=travel_s)
+
         if wp["kind"] == "meal":
             last_meal_depart = next(
                 (e["depart"] for e in reversed(schedule) if e["kind"] == "meal" and e.get("depart")),
                 None
             )
 
-            # Waypoints now carry their meal slot directly (set by
-            # build_day_sequence); fall back to name parsing for safety.
             meal_name = wp.get("meal_name")
             if meal_name is None:
-                if "Breakfast" in wp["name"]:
-                    meal_name = "breakfast"
-                elif "Lunch" in wp["name"]:
-                    meal_name = "lunch"
-                elif "Dinner" in wp["name"]:
-                    meal_name = "dinner"
+                if "Breakfast" in wp["name"]: meal_name = "breakfast"
+                elif "Lunch" in wp["name"]: meal_name = "lunch"
+                elif "Dinner" in wp["name"]: meal_name = "dinner"
 
             if meal_name:
                 window_start, window_end = _meal_window_datetimes(day, meal_name)
                 target = _meal_target_datetime(day, meal_name)
 
-                # Respect spacing from previous meal.
                 if last_meal_depart:
-                    if meal_name == "lunch":
-                        earliest = last_meal_depart + timedelta(hours=2, minutes=30)
-                    elif meal_name == "dinner":
-                        earliest = last_meal_depart + timedelta(hours=3, minutes=30)
-                    else:
-                        earliest = last_meal_depart + timedelta(hours=1)
-
+                    if meal_name == "lunch": earliest = last_meal_depart + timedelta(hours=2, minutes=30)
+                    elif meal_name == "dinner": earliest = last_meal_depart + timedelta(hours=3, minutes=30)
+                    else: earliest = last_meal_depart + timedelta(hours=1)
                     window_start = max(window_start, earliest)
 
-                # ─────────────────────────────────────────────────────────────
-                # IMPORTANT:
-                # Don't blindly force 11:30 / 18:00.
-                # If we're already inside the acceptable meal window, eat immediately.
-                # If we're before the window, wait only until the start.
-                # If we're after the window, DON'T pretend waiting will fix it.
-                # The validator should flag the impossible day and the repair
-                # mechanism can remove/rearrange attractions.
-                # ─────────────────────────────────────────────────────────────
                 if arrival < window_start:
                     arrival = window_start
-                elif arrival <= window_end:
-                    # Already at a valid meal time.
-                    # No artificial waiting until target.
-                    pass
-                else:
-                    # Meal is already too late. Do NOT push it even later.
-                    # This is deliberately left untouched so validation sees
-                    # the violation if meal placement itself was impossible.
-                    log.warning(
-                        "%s scheduled at %s, outside meal window %s-%s",
-                        wp["name"],
-                        fmt_time(arrival),
-                        fmt_time(window_start),
-                        fmt_time(window_end),
-                    )
+                elif arrival > window_end:
+                    log.warning("%s scheduled at %s, outside meal window %s-%s", wp["name"], fmt_time(arrival), fmt_time(window_start), fmt_time(window_end))
 
         place = wp.get("place")
-        dur = wp.get("duration_min") or (place.visit_duration_min if place else 60)
-        # Opening-hour clamping applies to attractions; meals are governed by
-        # their meal windows (handled above), not the restaurant's hours.
+        dur = wp.get("duration_min") if wp.get("duration_min") is not None else (place.visit_duration_min if place else 60)
+
+        # ── FIX: DYNAMIC TIME COMPRESSION (ATTRACTIONS ONLY) ──
+        if wp["kind"] == "attraction":
+            # Calculate time left in day (reserving 30 mins for the drive home)
+            time_left_in_day = (day.end_time - arrival).total_seconds() / 60.0 - 30
+
+            if dur > time_left_in_day:
+                if time_left_in_day < 20:
+                    dur = 0 # Too late to visit. Set to 0 so validation catches and deletes it.
+                else:
+                    dur = int(time_left_in_day) # Compress the visit to fit perfectly
+
         if place:
             win = get_opening_window(place, day.date)
             if win:
@@ -1445,13 +1466,13 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
                 if close_dt <= open_dt: close_dt += timedelta(days=1)
                 if arrival < open_dt: arrival = open_dt
                 if arrival >= close_dt:
-                    # Already closed on arrival -> validation must reject this stop.
                     dur = 0
                 elif arrival + timedelta(minutes=dur) > close_dt:
-                    dur = max(int((close_dt - arrival).total_seconds() / 60), 0)
+                    # Compress the visit to fit before closing time (min 30 mins) instead of 0
+                    dur = max(int((close_dt - arrival).total_seconds() / 60), 30)
 
         depart = arrival + timedelta(minutes=dur)
-        
+
         if schedule and travel_s > 0:
             schedule[-1]["transit_to_next"] = {
                 "mode": cfg.transport_mode.lower(),
@@ -1469,20 +1490,45 @@ def calculate_schedule(day: DayPlan, cfg: TripConfig) -> list[dict]:
         })
         cur, prev = depart, loc
 
+    # Process Final Node cleanly (DRY implementation)
     last_wp = day.sequence[-1]
+    last_name = last_wp["name"]
     last_loc = last_wp["location"]
+
+    # Calculate return time
     ret_s = last_wp.get("travel_sec_from_prev", int(haversine_km(prev, last_loc) / spd * 3600))
-    if schedule and ret_s > 0:
-        schedule[-1]["transit_to_next"] = {
-            "mode": cfg.transport_mode.lower(),
-            "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_wp['name']}"
-        }
+
+    # Robust duplicate check: validates against exact name matches or specific keywords
+    is_duplicate_end = False
+    if schedule:
+        prev_name = schedule[-1]["name"].lower()
+        is_duplicate_end = (
+            schedule[-1]["name"] == last_name or
+            any(sub in prev_name for sub in ["check-in", "check-out", "depart"])
+        )
+
+    if not is_duplicate_end:
+        if schedule and ret_s > 0:
+            schedule[-1]["transit_to_next"] = {
+                "mode": cfg.transport_mode.lower(),
+                "description": f"{cfg.transport_mode.capitalize()} --- {int(ret_s/60)} mins ---> {last_name}"
+            }
+
     schedule.append({
-        "name": last_wp["name"], "kind": last_wp["kind"],
+        "name": last_name,
+        "kind": last_wp.get("kind", "hotel"), # Dynamically retains the kind, fallbacks safely
         "arrival": cur + timedelta(seconds=ret_s), "depart": None,
         "travel_sec": ret_s, "duration_min": 0, "location": last_loc,
         "rating": None, "price_level": None, "opening_hours": []
     })
+
+    if day.day_type == "normal" and schedule and schedule[0].get("kind") == "hotel":
+        schedule.pop(0)
+
+    if day.day_type == "departure" and schedule:
+        first = schedule[0]
+        if first.get("kind") == "hotel" and any(token in first["name"].lower() for token in ["leave hotel", "drop bags"]):
+            schedule.pop(0)
 
     day.schedule = schedule
     return schedule
@@ -1587,9 +1633,6 @@ def _meal_name_from_entry(entry: dict) -> Optional[str]:
 
 
 def _drop_bad_meal(day: DayPlan, used_restaurants: set) -> bool:
-    """If a scheduled meal sits outside its acceptable window (or spills into
-    the next day), drop that meal -- meals are optional -- instead of gutting
-    attractions."""
     day_date = datetime.strptime(day.date, "%Y-%m-%d").date()
     for entry in day.schedule:
         if entry["kind"] != "meal":
@@ -1597,16 +1640,22 @@ def _drop_bad_meal(day: DayPlan, used_restaurants: set) -> bool:
         meal_name = _meal_name_from_entry(entry)
         if not meal_name:
             continue
+            
         lo, hi = MEAL_WINDOWS[meal_name]
         t = entry["arrival"].time()
+        
         out_of_window = not (lo <= t <= hi)
         next_day = entry["arrival"].date() != day_date
-        if out_of_window or next_day:
+        
+        # ── FIX: Check if restaurant closed and truncated the meal ──
+        truncated = entry.get("duration_min", 60) < 60
+        
+        if out_of_window or next_day or truncated:
             place = day.meals.pop(meal_name, None)
             if place is not None:
                 used_restaurants.discard(place.name.lower())
             day.dropped_meals.add(meal_name)
-            log.info("Repair: dropped out-of-window %s (%s)", meal_name, entry["name"])
+            log.info("Repair: dropped invalid/closed %s (%s)", meal_name, entry["name"])
             return True
     return False
 
@@ -1781,7 +1830,7 @@ if __name__ == "__main__":
         hotel={"name": "Hotel Gracery Shinjuku", "latitude": 35.6938, "longitude": 139.7036},
         airport={"name": "Narita Airport", "latitude": 35.7720, "longitude": 140.3929},
         selected_preferences=["culture", "food", "scenery"],
-        travel_style="moderate", transport_mode="TRANSIT",   
+        travel_style="packed", transport_mode="TRANSIT",   
         group_size=2, budget="medium",    # Group size havent implement or no need implement
         check_in_time="14:00",
         check_out_time="11:00",
